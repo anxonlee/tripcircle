@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "tc-scaffold",
-    "slug": "tc-scaffold",
+    "name": "TripCircle",
+    "slug": "tripcircle",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
