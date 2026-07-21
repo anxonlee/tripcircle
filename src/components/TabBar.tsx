@@ -8,8 +8,8 @@ import { colors } from '../theme/colors';
 type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
 
 const TAB_META: Record<string, { icon: IconName; label: string }> = {
-  Explore: { icon: 'compass-outline', label: 'Explore' },
-  Saved: { icon: 'bookmark-outline', label: 'Saved' },
+  Discover: { icon: 'compass-outline', label: 'Discover' },
+  Explore: { icon: 'map-search-outline', label: 'Explore' },
   Trips: { icon: 'routes', label: 'Trips' },
   Profile: { icon: 'account-outline', label: 'Profile' },
 };

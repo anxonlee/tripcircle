@@ -19,6 +19,7 @@ interface TripState {
   budgetCapYen: number;
   setStartPlace: (sp: StartPlace | null) => void;
   togglePlace: (id: string) => void;
+  setSelection: (ids: string[]) => void;
   clearSelection: () => void;
   setGoal: (g: Goal) => void;
 }
@@ -39,6 +40,7 @@ export const useTripStore = create<TripState>()(
             ? s.selectedPlaceIds.filter((x) => x !== id)
             : [...s.selectedPlaceIds, id],
         })),
+      setSelection: (ids) => set({ selectedPlaceIds: ids }),
       clearSelection: () => set({ selectedPlaceIds: [] }),
       setGoal: (g) => set({ goal: g }),
     }),

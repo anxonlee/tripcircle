@@ -4,6 +4,11 @@ export function formatYen(n: number): string {
   return `¥${String(rounded).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
 }
 
+/** "820" / "1.8k" / "3.1k" — compact counts for feed stats. */
+export function formatCount(n: number): string {
+  return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
+}
+
 /** "45 min" / "1 h 32 min" */
 export function formatDuration(min: number): string {
   const m = Math.round(min);

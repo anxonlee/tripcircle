@@ -192,6 +192,23 @@ export function PlanScreen({ navigation }: Props) {
         <Text style={styles.backChipText}>Back</Text>
       </Pressable>
 
+      <Pressable
+        style={[styles.shareChip, { top: insets.top + 8 }]}
+        onPress={() =>
+          navigation.navigate('Publish', {
+            title: 'My day out',
+            city: 'Tokyo',
+            themes: Array.from(
+              new Set(plan.stops.flatMap((s) => s.place.categories))
+            ).slice(0, 2),
+            stopIds: plan.stops.map((s) => s.place.id),
+          })
+        }
+      >
+        <MaterialCommunityIcons name="share-variant-outline" size={16} color={colors.textPrimary} />
+        <Text style={styles.backChipText}>Share</Text>
+      </Pressable>
+
       <BottomSheet
         index={1}
         snapPoints={snapPoints}
@@ -417,6 +434,22 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
   },
   backChipText: { fontSize: 13, fontWeight: '500', color: colors.textPrimary },
+  shareChip: {
+    position: 'absolute',
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: colors.surface,
+    borderRadius: 24,
+    paddingLeft: 11,
+    paddingRight: 13,
+    height: 40,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+  },
   sheet: {
     backgroundColor: colors.surface,
     borderTopLeftRadius: 20,
