@@ -48,14 +48,28 @@ export function PlanScreen({ navigation }: Props) {
   const mapRef = useRef<MapView>(null);
 
   useEffect(() => {
-    placesService.listPlaces().then((all) => {
+    let alive = true;
+    (async () => {
+      const all = await placesService.listPlaces();
+      if (!alive) return;
       const byId = new Map(all.map((p) => [p.id, p]));
-      setSelectedPlaces(
-        selectedIds.map((id) => byId.get(id)).filter((p): p is Place => !!p)
-      );
-    });
-    routingService.getLegOptionsFn().then((fn) => setLegOptionsFn(() => fn));
-  }, [selectedIds]);
+      const picked = selectedIds
+        .map((id) => byId.get(id))
+        .filter((p): p is Place => !!p);
+      setSelectedPlaces(picked);
+
+      // Prefetch travel estimates for exactly the points this plan will route
+      // between, then hand the optimizer a synchronous lookup.
+      const points = startPlace
+        ? [startPlace.location, ...picked.map((p) => p.location)]
+        : picked.map((p) => p.location);
+      const fn = await routingService.getLegOptionsFn(points);
+      if (alive) setLegOptionsFn(() => fn);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [selectedIds, startPlace]);
 
   const plans = useMemo<Record<Goal, DayPlan> | null>(() => {
     if (!startPlace || !legOptionsFn || selectedPlaces.length === 0) return null;

@@ -5,6 +5,7 @@ import type { CompositeScreenProps } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -20,7 +21,7 @@ import { CARD_GAP, CARD_HEIGHT, PlaceCard } from '../components/PlaceCard';
 import type { Category, Place } from '../domain/types';
 import { haversineKm } from '../lib/geo';
 import type { RootStackParamList, TabParamList } from '../navigation';
-import { placesService } from '../services/places';
+import { placeSearchIsLive, placesService } from '../services/places';
 import { useTripStore, useUiStore } from '../store/useTripStore';
 import { categoryColors, categoryLabels, colors } from '../theme/colors';
 
@@ -63,6 +64,9 @@ export function PlacesScreen({ navigation }: Props) {
   const [places, setPlaces] = useState<Place[]>([]);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Category | null>(null);
+  /** Live provider results; null means "show the local list". */
+  const [searchHits, setSearchHits] = useState<Place[] | null>(null);
+  const [searching, setSearching] = useState(false);
   const mapRef = useRef<MapView>(null);
   const listRef = useRef<FlatList<Place>>(null);
   const sheetRef = useRef<BottomSheet>(null);
@@ -71,14 +75,42 @@ export function PlacesScreen({ navigation }: Props) {
     placesService.listPlaces().then(setPlaces);
   }, []);
 
+  /**
+   * With a live provider, typing searches the real POI index (debounced) so
+   * friends can add any Bay Area spot, not just the curated set. Without one,
+   * the same box filters the seed list locally.
+   */
+  useEffect(() => {
+    const q = query.trim();
+    if (!placeSearchIsLive || q.length < 2) {
+      setSearchHits(null);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    let alive = true;
+    const t = setTimeout(async () => {
+      const hits = await placesService.searchPlaces(q, startPlace?.location);
+      if (!alive) return;
+      setSearchHits(hits);
+      setSearching(false);
+    }, 350);
+    return () => {
+      alive = false;
+      clearTimeout(t);
+    };
+  }, [query, startPlace]);
+
   const visiblePlaces = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return places.filter(
+    const base = searchHits ?? places;
+    return base.filter(
       (p) =>
         (!filter || p.categories.includes(filter)) &&
-        (!q || p.name.toLowerCase().includes(q))
+        // Live hits are already matched server-side; only filter locally.
+        (searchHits !== null || !q || p.name.toLowerCase().includes(q))
     );
-  }, [places, query, filter]);
+  }, [places, searchHits, query, filter]);
 
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const snapPoints = useMemo(() => ['30%', '55%', '88%'], []);
@@ -154,7 +186,11 @@ export function PlacesScreen({ navigation }: Props) {
             </Pressable>
           )}
           <View style={styles.searchPill}>
-            <MaterialCommunityIcons name="magnify" size={16} color={colors.textMuted} />
+            {searching ? (
+              <ActivityIndicator size="small" color={colors.textMuted} />
+            ) : (
+              <MaterialCommunityIcons name="magnify" size={16} color={colors.textMuted} />
+            )}
             <TextInput
               style={styles.searchInput}
               value={query}
