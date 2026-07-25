@@ -35,8 +35,8 @@ export interface Place {
   categories: Category[];
   /** 0 = free, 4 = splurge. */
   priceLevel: 0 | 1 | 2 | 3 | 4;
-  /** Estimated spend per visit in yen (entry fee / typical meal). */
-  avgCostYen: number;
+  /** Estimated spend per visit in USD (entry fee / typical meal). */
+  avgCostUsd: number;
   openHours: OpenHours | null;
   /** Typical time spent at the place, minutes. */
   visitDurationMin: number;
@@ -71,6 +71,6 @@ export type TransportMode = 'walk' | 'transit' | 'taxi';
 export interface LegEstimate {
   mode: TransportMode;
   durationMin: number;
-  costYen: number;
+  costUsd: number;
   distanceKm: number;
 }

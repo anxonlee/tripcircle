@@ -17,7 +17,7 @@ export function haversineKm(a: LatLng, b: LatLng): number {
 
 /**
  * PRD §3.1 coarse storage: snap to ~100m block-level precision.
- * 3 decimal places ≈ 111m latitude / ~90m longitude at Tokyo's latitude.
+ * 3 decimal places ≈ 111m latitude / ~88m longitude at San Francisco's latitude.
  * Nothing finer than this may ever be persisted for a start place.
  */
 export function snapToCoarse(loc: LatLng): LatLng {

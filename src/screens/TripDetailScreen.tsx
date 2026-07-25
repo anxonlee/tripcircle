@@ -9,7 +9,7 @@ import { IconTile } from '../components/IconTile';
 import { NavHeader } from '../components/NavHeader';
 import type { CostShare, Trip } from '../domain/social';
 import type { Place } from '../domain/types';
-import { formatYen } from '../lib/format';
+import { formatUsd } from '../lib/format';
 import { inviteToTrip, shareTrip } from '../lib/share';
 import type { RootStackParamList } from '../navigation';
 import { placesService } from '../services/places';
@@ -145,7 +145,7 @@ export function TripDetailScreen({ route, navigation }: Props) {
         <View style={styles.footer}>
           <View style={styles.footerTotal}>
             <Text style={styles.footerLabel}>Total spend</Text>
-            <Text style={styles.footerValue}>{formatYen(trip.costYen)}</Text>
+            <Text style={styles.footerValue}>{formatUsd(trip.costUsd)}</Text>
           </View>
           <Pressable
             style={({ pressed }) => [styles.splitBtn, pressed && styles.splitPressed]}

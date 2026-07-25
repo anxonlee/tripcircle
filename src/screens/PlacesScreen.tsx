@@ -24,11 +24,12 @@ import { placesService } from '../services/places';
 import { useTripStore, useUiStore } from '../store/useTripStore';
 import { categoryColors, categoryLabels, colors } from '../theme/colors';
 
-const TOKYO_REGION = {
-  latitude: 35.658,
-  longitude: 139.745,
-  latitudeDelta: 0.11,
-  longitudeDelta: 0.14,
+/** Centered on SF proper, wide enough to show the bridge and the Mission. */
+const BAY_AREA_REGION = {
+  latitude: 37.772,
+  longitude: -122.437,
+  latitudeDelta: 0.1,
+  longitudeDelta: 0.13,
 };
 
 const FILTERS: Category[] = [
@@ -104,7 +105,7 @@ export function PlacesScreen({ navigation }: Props) {
       <MapView
         ref={mapRef}
         style={StyleSheet.absoluteFill}
-        initialRegion={TOKYO_REGION}
+        initialRegion={BAY_AREA_REGION}
         mapPadding={{ top: insets.top + 90, left: 0, right: 0, bottom: 240 }}
         onPress={() => setHighlighted(null)}
       >

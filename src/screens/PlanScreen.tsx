@@ -10,7 +10,7 @@ import { transportIcon, transportLabel } from '../components/icons';
 import { TimelineNode } from '../components/IconTile';
 import type { Place, TransportMode } from '../domain/types';
 import { formatTime } from '../lib/geo';
-import { formatDuration, formatYen } from '../lib/format';
+import { formatDuration, formatUsd } from '../lib/format';
 import {
   optimizeDay,
   type DayPlan,
@@ -39,7 +39,7 @@ export function PlanScreen({ navigation }: Props) {
   const setGoal = useTripStore((s) => s.setGoal);
   const dayStartMin = useTripStore((s) => s.dayStartMin);
   const homeByMin = useTripStore((s) => s.homeByMin);
-  const budgetCapYen = useTripStore((s) => s.budgetCapYen);
+  const budgetCapUsd = useTripStore((s) => s.budgetCapUsd);
   const highlightedId = useUiStore((s) => s.highlightedPlaceId);
   const setHighlighted = useUiStore((s) => s.setHighlighted);
 
@@ -64,14 +64,14 @@ export function PlanScreen({ navigation }: Props) {
       places: selectedPlaces,
       dayStartMin,
       homeByMin,
-      budgetCapYen,
+      budgetCapUsd,
       legOptions: legOptionsFn,
     };
     return {
       balanced: optimizeDay({ ...base, goal: 'balanced' }),
       fastest: optimizeDay({ ...base, goal: 'fastest' }),
     };
-  }, [startPlace, selectedPlaces, legOptionsFn, dayStartMin, homeByMin, budgetCapYen]);
+  }, [startPlace, selectedPlaces, legOptionsFn, dayStartMin, homeByMin, budgetCapUsd]);
 
   const plan = plans?.[goal] ?? null;
 
@@ -124,17 +124,17 @@ export function PlanScreen({ navigation }: Props) {
     goal === 'balanced'
       ? plan.totals.travelMin - other.totals.travelMin
       : other.totals.travelMin - plan.totals.travelMin;
-  const extraYen =
+  const extraUsd =
     goal === 'balanced'
-      ? other.totals.travelYen - plan.totals.travelYen
-      : plan.totals.travelYen - other.totals.travelYen;
+      ? other.totals.travelUsd - plan.totals.travelUsd
+      : plan.totals.travelUsd - other.totals.travelUsd;
   let tradeoff: string;
-  if (fasterMin <= 0 && extraYen <= 0) {
+  if (fasterMin <= 0 && extraUsd <= 0) {
     tradeoff = 'Same plan under both goals today';
   } else if (goal === 'balanced') {
-    tradeoff = `Fastest: ${formatDuration(fasterMin)} faster · ${formatYen(extraYen)} more`;
+    tradeoff = `Fastest: ${formatDuration(fasterMin)} faster · ${formatUsd(extraUsd)} more`;
   } else {
-    tradeoff = `${formatDuration(fasterMin)} faster · ${formatYen(extraYen)} more than Balanced`;
+    tradeoff = `${formatDuration(fasterMin)} faster · ${formatUsd(extraUsd)} more than Balanced`;
   }
 
   return (
@@ -197,7 +197,7 @@ export function PlanScreen({ navigation }: Props) {
         onPress={() =>
           navigation.navigate('Publish', {
             title: 'My day out',
-            city: 'Tokyo',
+            city: 'San Francisco',
             themes: Array.from(
               new Set(plan.stops.flatMap((s) => s.place.categories))
             ).slice(0, 2),
@@ -238,7 +238,7 @@ export function PlanScreen({ navigation }: Props) {
           </View>
           <Text style={styles.tradeoff}>{tradeoff}</Text>
           <View style={styles.cellsRow}>
-            <SummaryCell label="Day total" value={formatYen(plan.totals.totalYen)} />
+            <SummaryCell label="Day total" value={formatUsd(plan.totals.totalUsd)} />
             <SummaryCell label="Travel" value={formatDuration(plan.totals.travelMin)} />
             <SummaryCell label="Home by" value={formatTime(plan.homeMin)} />
           </View>
@@ -256,7 +256,7 @@ export function PlanScreen({ navigation }: Props) {
 
           {plan.stops.map((s) => (
             <View key={s.place.id}>
-              <LegRow mode={s.leg.mode} durationMin={s.leg.durationMin} costYen={s.leg.costYen} />
+              <LegRow mode={s.leg.mode} durationMin={s.leg.durationMin} costUsd={s.leg.costUsd} />
               <Pressable
                 onPress={() => {
                   setHighlighted(s.place.id);
@@ -278,7 +278,7 @@ export function PlanScreen({ navigation }: Props) {
                     {s.place.name}
                   </Text>
                   <Text style={styles.stopCost}>
-                    {s.place.avgCostYen > 0 ? `${formatYen(s.place.avgCostYen)} · ` : ''}
+                    {s.place.avgCostUsd > 0 ? `${formatUsd(s.place.avgCostUsd)} · ` : ''}
                     {s.place.visitDurationMin} min visit
                     {s.waitMin >= 15 ? ` · wait ${s.waitMin} min` : ''}
                   </Text>
@@ -303,7 +303,7 @@ export function PlanScreen({ navigation }: Props) {
               <LegRow
                 mode={plan.returnLeg.mode}
                 durationMin={plan.returnLeg.durationMin}
-                costYen={plan.returnLeg.costYen}
+                costUsd={plan.returnLeg.costUsd}
               />
               <View style={styles.timelineRow}>
                 <View style={styles.gutter}>
@@ -372,11 +372,11 @@ function SummaryCell({ label, value }: { label: string; value: string }) {
 function LegRow({
   mode,
   durationMin,
-  costYen,
+  costUsd,
 }: {
   mode: TransportMode;
   durationMin: number;
-  costYen: number;
+  costUsd: number;
 }) {
   return (
     <View style={styles.legRow}>
@@ -391,7 +391,7 @@ function LegRow({
         />
         <Text style={styles.legText}>
           {transportLabel[mode]} {formatDuration(durationMin)}
-          {costYen > 0 ? ` · ${formatYen(costYen)}` : ''}
+          {costUsd > 0 ? ` · ${formatUsd(costUsd)}` : ''}
         </Text>
       </View>
     </View>

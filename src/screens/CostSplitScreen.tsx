@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Avatar } from '../components/Avatar';
 import { NavHeader } from '../components/NavHeader';
 import type { CostShare, Trip } from '../domain/social';
-import { formatYen } from '../lib/format';
+import { formatUsd } from '../lib/format';
 import type { RootStackParamList } from '../navigation';
 import { tripsService } from '../services/trips';
 import { colors } from '../theme/colors';
@@ -24,15 +24,15 @@ interface Transfer {
 /**
  * Greedy settle-up: everyone owes an equal share; net each person's balance
  * and match the biggest debtor to the biggest creditor until settled. Pure —
- * no rounding drift beyond yen. (Phase 2 cost splitting.)
+ * no rounding drift beyond a dollar. (Phase 2 cost splitting.)
  */
 function settleUp(shares: CostShare[]): Transfer[] {
-  const total = shares.reduce((s, x) => s + x.paidYen, 0);
+  const total = shares.reduce((s, x) => s + x.paidUsd, 0);
   const fair = total / shares.length;
   const balances = shares.map((s) => ({
     id: s.user.id,
     name: s.user.name,
-    net: Math.round(s.paidYen - fair),
+    net: Math.round(s.paidUsd - fair),
   }));
   const creditors = balances.filter((b) => b.net > 0).sort((a, b) => b.net - a.net);
   const debtors = balances.filter((b) => b.net < 0).sort((a, b) => a.net - b.net);
@@ -76,7 +76,7 @@ export function CostSplitScreen({ route, navigation }: Props) {
     };
   }, [tripId]);
 
-  const total = useMemo(() => shares.reduce((s, x) => s + x.paidYen, 0), [shares]);
+  const total = useMemo(() => shares.reduce((s, x) => s + x.paidUsd, 0), [shares]);
   const fair = shares.length ? Math.round(total / shares.length) : 0;
   const transfers = useMemo(() => settleUp(shares), [shares]);
 
@@ -87,12 +87,12 @@ export function CostSplitScreen({ route, navigation }: Props) {
         {trip && <Text style={styles.tripTitle}>{trip.title}</Text>}
         <View style={styles.totalCard}>
           <View style={styles.totalCell}>
-            <Text style={styles.totalValue}>{formatYen(total)}</Text>
+            <Text style={styles.totalValue}>{formatUsd(total)}</Text>
             <Text style={styles.totalLabel}>Total spend</Text>
           </View>
           <View style={styles.vline} />
           <View style={styles.totalCell}>
-            <Text style={styles.totalValue}>{formatYen(fair)}</Text>
+            <Text style={styles.totalValue}>{formatUsd(fair)}</Text>
             <Text style={styles.totalLabel}>Each person</Text>
           </View>
         </View>
@@ -100,7 +100,7 @@ export function CostSplitScreen({ route, navigation }: Props) {
         <Text style={styles.sectionLabel}>Who paid</Text>
         <View style={styles.card}>
           {shares.map((s, i) => {
-            const net = Math.round(s.paidYen - fair);
+            const net = Math.round(s.paidUsd - fair);
             return (
               <View key={s.user.id} style={[styles.payRow, i > 0 && styles.rowDivider]}>
                 <Avatar user={s.user} size={32} />
@@ -108,7 +108,7 @@ export function CostSplitScreen({ route, navigation }: Props) {
                   <Text style={styles.payName}>
                     {s.user.id === 'you' ? 'You' : s.user.name}
                   </Text>
-                  <Text style={styles.paySub}>paid {formatYen(s.paidYen)}</Text>
+                  <Text style={styles.paySub}>paid {formatUsd(s.paidUsd)}</Text>
                 </View>
                 <Text
                   style={[
@@ -117,9 +117,9 @@ export function CostSplitScreen({ route, navigation }: Props) {
                   ]}
                 >
                   {net > 0
-                    ? `gets back ${formatYen(net)}`
+                    ? `gets back ${formatUsd(net)}`
                     : net < 0
-                    ? `owes ${formatYen(-net)}`
+                    ? `owes ${formatUsd(-net)}`
                     : 'settled'}
                 </Text>
               </View>
@@ -143,7 +143,7 @@ export function CostSplitScreen({ route, navigation }: Props) {
                     {t.toId === 'you' ? 'you' : t.toName}
                   </Text>
                 </Text>
-                <Text style={styles.transferAmount}>{formatYen(t.amount)}</Text>
+                <Text style={styles.transferAmount}>{formatUsd(t.amount)}</Text>
               </View>
             ))
           )}

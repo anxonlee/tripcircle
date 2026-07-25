@@ -11,7 +11,7 @@ import { NavHeader } from '../components/NavHeader';
 import { TimelineNode } from '../components/IconTile';
 import type { Comment, FeedPost } from '../domain/social';
 import type { Place } from '../domain/types';
-import { formatCount, formatDuration, formatYen } from '../lib/format';
+import { formatCount, formatDuration, formatUsd } from '../lib/format';
 import { sharePost } from '../lib/share';
 import type { RootStackParamList } from '../navigation';
 import { placesService } from '../services/places';
@@ -146,7 +146,7 @@ export function PostDetailScreen({ route, navigation }: Props) {
         <View style={styles.summaryRow}>
           <SummaryCell label="Time" value={formatDuration(post.durationMin)} />
           <View style={styles.vline} />
-          <SummaryCell label="Spend" value={formatYen(post.costYen)} />
+          <SummaryCell label="Spend" value={formatUsd(post.costUsd)} />
           <View style={styles.vline} />
           <SummaryCell label="Stops" value={String(post.stopIds.length)} />
         </View>

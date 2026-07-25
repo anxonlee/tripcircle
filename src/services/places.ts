@@ -1,6 +1,6 @@
 import type { Landmark, Place } from '../domain/types';
-import { tokyoLandmarks } from './mock/landmarks';
-import { tokyoPlaces } from './mock/tokyoPlaces';
+import { bayAreaLandmarks } from './mock/landmarks';
+import { bayAreaPlaces } from './mock/bayAreaPlaces';
 
 /**
  * THE provider boundary for POI data (PRD §12: map/POI licensing).
@@ -22,16 +22,16 @@ export interface PlacesService {
 class MockPlacesService implements PlacesService {
   async searchLandmarks(query: string): Promise<Landmark[]> {
     const q = query.trim().toLowerCase();
-    if (!q) return tokyoLandmarks;
-    return tokyoLandmarks.filter((lm) => lm.name.toLowerCase().includes(q));
+    if (!q) return bayAreaLandmarks;
+    return bayAreaLandmarks.filter((lm) => lm.name.toLowerCase().includes(q));
   }
 
   async listPlaces(): Promise<Place[]> {
-    return tokyoPlaces;
+    return bayAreaPlaces;
   }
 
   async getPlace(id: string): Promise<Place | undefined> {
-    return tokyoPlaces.find((p) => p.id === id);
+    return bayAreaPlaces.find((p) => p.id === id);
   }
 }
 

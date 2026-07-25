@@ -10,54 +10,54 @@ export const trips: Trip[] = [
   {
     id: 'trip-weekend-crew',
     title: 'Weekend with the crew',
-    city: 'Tokyo',
+    city: 'San Francisco',
     kind: 'shared',
     dateLabel: 'Sat, Mar 14',
     coverThemes: ['historical', 'nightlife'],
     members: [users.you, users.mei, users.kenji],
-    placeIds: ['tsukiji-outer-market', 'sensoji', 'nakamise-street', 'shibuya-sky', 'golden-gai'],
-    costYen: 11800,
+    placeIds: ['ferry-building', 'alcatraz-island', 'chinatown-dragon-gate', 'coit-tower', 'vesuvio-cafe'],
+    costUsd: 186,
   },
   {
-    id: 'trip-ramen-clone',
-    title: 'Ramen crawl under ¥3,000',
-    city: 'Tokyo',
+    id: 'trip-burrito-clone',
+    title: 'Mission burrito crawl under $40',
+    city: 'San Francisco',
     kind: 'shared',
     dateLabel: 'Fri, Mar 20',
     coverThemes: ['food'],
     members: [users.you, users.aria],
-    placeIds: ['ichiran-shibuya', 'harajuku-gyoza-lou', 'afuri-harajuku', 'omoide-yokocho'],
-    costYen: 5700,
-    clonedFromTitle: 'Ramen crawl under ¥3,000 · @kenjieats',
+    placeIds: ['la-taqueria', 'dolores-park', 'tartine-bakery', 'el-farolito'],
+    costUsd: 76,
+    clonedFromTitle: 'Mission burrito crawl under $40 · @kenjieats',
   },
   {
-    id: 'trip-kansai',
-    title: 'Kansai in spring',
-    city: 'Tokyo → Kyoto → Osaka',
+    id: 'trip-norcal',
+    title: 'NorCal in spring',
+    city: 'San Francisco → Berkeley → Marin',
     kind: 'multi',
     dateLabel: 'Apr 4–9',
     coverThemes: ['nature', 'historical'],
     members: [users.you, users.mei, users.sora],
     placeIds: [],
-    costYen: 0,
+    costUsd: 0,
     stays: [
       {
-        id: 'stay-tokyo',
-        city: 'Tokyo',
+        id: 'stay-sf',
+        city: 'San Francisco',
         dateLabel: 'Apr 4–5',
-        placeIds: ['meiji-jingu', 'shibuya-sky', 'omoide-yokocho'],
+        placeIds: ['golden-gate-bridge', 'twin-peaks', 'smugglers-cove'],
       },
       {
-        id: 'stay-kyoto',
-        city: 'Kyoto',
+        id: 'stay-berkeley',
+        city: 'Berkeley & Oakland',
         dateLabel: 'Apr 6–7',
-        placeIds: ['sensoji', 'nezu-shrine', 'hamarikyu'],
+        placeIds: ['uc-berkeley', 'lake-merritt'],
       },
       {
-        id: 'stay-osaka',
-        city: 'Osaka',
+        id: 'stay-marin',
+        city: 'Marin',
         dateLabel: 'Apr 8–9',
-        placeIds: ['ichiran-shibuya', 'ebisu-yokocho', 'golden-gai'],
+        placeIds: ['muir-woods', 'baker-beach', 'crissy-field'],
       },
     ],
   },
@@ -66,13 +66,13 @@ export const trips: Trip[] = [
 /** Cost-split ledger for the shared weekend trip (Phase 2). */
 export const costSharesByTrip: Record<string, CostShare[]> = {
   'trip-weekend-crew': [
-    { user: users.you, paidYen: 7400 },
-    { user: users.mei, paidYen: 3200 },
-    { user: users.kenji, paidYen: 1200 },
+    { user: users.you, paidUsd: 118 },
+    { user: users.mei, paidUsd: 48 },
+    { user: users.kenji, paidUsd: 20 },
   ],
-  'trip-ramen-clone': [
-    { user: users.you, paidYen: 2100 },
-    { user: users.aria, paidYen: 3600 },
+  'trip-burrito-clone': [
+    { user: users.you, paidUsd: 28 },
+    { user: users.aria, paidUsd: 48 },
   ],
 };
 
@@ -82,12 +82,12 @@ export const costSharesByTrip: Record<string, CostShare[]> = {
  * live from the trip store and are merged in by the screen.
  */
 export const sharedWishlistAdds: { placeId: string; addedById: string }[] = [
-  { placeId: 'shibuya-sky', addedById: 'mei' },
-  { placeId: 'golden-gai', addedById: 'kenji' },
-  { placeId: 'daikanyama-tsite', addedById: 'aria' },
-  { placeId: 'hamarikyu', addedById: 'mei' },
-  { placeId: 'tsukiji-outer-market', addedById: 'kenji' },
-  { placeId: 'nezu-shrine', addedById: 'sora' },
+  { placeId: 'golden-gate-bridge', addedById: 'mei' },
+  { placeId: 'smugglers-cove', addedById: 'kenji' },
+  { placeId: 'valencia-street', addedById: 'aria' },
+  { placeId: 'lands-end-trail', addedById: 'mei' },
+  { placeId: 'ferry-building', addedById: 'kenji' },
+  { placeId: 'muir-woods', addedById: 'sora' },
 ];
 
 /** People collaborating on the shared wishlist. */
@@ -95,9 +95,9 @@ export const wishlistMembers = ['you', 'mei', 'kenji', 'aria', 'sora'];
 
 /** Travel passport stamps (Phase 3): cities the user has planned days in. */
 export const passportStamps: PassportStamp[] = [
-  { city: 'Tokyo', country: 'Japan', code: 'TYO', visits: 14, lastVisited: 'This week', color: '#E8542F' },
-  { city: 'Kyoto', country: 'Japan', code: 'KYO', visits: 3, lastVisited: 'Last month', color: '#E8A22F' },
-  { city: 'Seoul', country: 'South Korea', code: 'SEL', visits: 2, lastVisited: 'Jan 2026', color: '#2F7FE8' },
-  { city: 'Taipei', country: 'Taiwan', code: 'TPE', visits: 1, lastVisited: 'Nov 2025', color: '#1D9E75' },
-  { city: 'Bangkok', country: 'Thailand', code: 'BKK', visits: 1, lastVisited: 'Aug 2025', color: '#8B5CF6' },
+  { city: 'San Francisco', country: 'United States', code: 'SFO', visits: 14, lastVisited: 'This week', color: '#E8542F' },
+  { city: 'Oakland', country: 'United States', code: 'OAK', visits: 3, lastVisited: 'Last month', color: '#E8A22F' },
+  { city: 'Los Angeles', country: 'United States', code: 'LAX', visits: 2, lastVisited: 'Jan 2026', color: '#2F7FE8' },
+  { city: 'Seattle', country: 'United States', code: 'SEA', visits: 1, lastVisited: 'Nov 2025', color: '#1D9E75' },
+  { city: 'New York', country: 'United States', code: 'NYC', visits: 1, lastVisited: 'Aug 2025', color: '#8B5CF6' },
 ];

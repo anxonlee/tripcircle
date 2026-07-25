@@ -6,7 +6,7 @@ import type {
   TransportMode,
 } from '../../domain/types';
 import { formatTime } from '../geo';
-import { formatYen } from '../format';
+import { formatUsd } from '../format';
 
 /**
  * Day-plan optimizer. Pure TypeScript, no UI or provider imports — travel
@@ -20,7 +20,7 @@ import { formatYen } from '../format';
  *     tour when that resolves the violation.
  *  3. Schedule: walk the tour, choosing each leg's transport greedily by the
  *     goal; wait out not-yet-open places; collect warnings.
- *  4. Budget: while over cap, downgrade the leg with the best yen-saved per
+ *  4. Budget: while over cap, downgrade the leg with the best dollars-saved per
  *     minute-added ratio; warn if the cap still can't be met.
  */
 
@@ -36,7 +36,7 @@ export interface OptimizeInput {
   /** Target return time ("home by"). */
   homeByMin: number;
   /** Cap on travel + at-place spend for the day. */
-  budgetCapYen: number;
+  budgetCapUsd: number;
   goal: Goal;
   legOptions: LegOptionsFn;
 }
@@ -67,18 +67,18 @@ export interface DayPlan {
   totals: {
     travelMin: number;
     waitMin: number;
-    travelYen: number;
+    travelUsd: number;
     /** Spend at places (entry fees, meals). */
-    spendYen: number;
-    totalYen: number;
+    spendUsd: number;
+    totalUsd: number;
   };
   warnings: string[];
 }
 
-/** Balanced: ¥40 ≈ one minute of value. Fastest: cost is only a tie-breaker. */
-const COST_WEIGHT_YEN_PER_MIN: Record<Goal, number> = {
-  balanced: 40,
-  fastest: 2000,
+/** Balanced: $0.35 ≈ one minute of value. Fastest: cost is only a tie-breaker. */
+const COST_WEIGHT_USD_PER_MIN: Record<Goal, number> = {
+  balanced: 0.35,
+  fastest: 15,
 };
 
 /**
@@ -89,7 +89,7 @@ const COST_WEIGHT_YEN_PER_MIN: Record<Goal, number> = {
 const FASTEST_TOLERANCE_MIN = 4;
 
 function legScore(leg: LegEstimate, goal: Goal): number {
-  return leg.durationMin + leg.costYen / COST_WEIGHT_YEN_PER_MIN[goal];
+  return leg.durationMin + leg.costUsd / COST_WEIGHT_USD_PER_MIN[goal];
 }
 
 /** Greedy per-leg transport choice under the goal. */
@@ -100,7 +100,7 @@ function chooseLeg(options: LegEstimate[], goal: Goal): LegEstimate {
     const nearFastest = options.filter(
       (o) => o.durationMin <= fastest.durationMin + FASTEST_TOLERANCE_MIN
     );
-    return nearFastest.reduce((a, b) => (b.costYen < a.costYen ? b : a));
+    return nearFastest.reduce((a, b) => (b.costUsd < a.costUsd ? b : a));
   }
   return options.reduce((a, b) => (legScore(b, goal) < legScore(a, goal) ? b : a));
 }
@@ -319,27 +319,27 @@ function repairClosingViolations(
 
 // ——— Budget repair ————————————————————————————————————————————————
 
-function travelYen(s: Schedule): number {
+function travelUsd(s: Schedule): number {
   return (
-    s.stops.reduce((sum, st) => sum + st.leg.costYen, 0) +
-    (s.returnLeg?.costYen ?? 0)
+    s.stops.reduce((sum, st) => sum + st.leg.costUsd, 0) +
+    (s.returnLeg?.costUsd ?? 0)
   );
 }
 
 /**
  * While over budget, downgrade the single leg whose cheaper alternative saves
- * the most yen per added minute. Reschedules after each change (times shift).
+ * the most dollars per added minute. Reschedules after each change (times shift).
  * May leave the plan over budget — that becomes a warning, not an error.
  */
 function repairBudget(
   input: OptimizeInput,
   order: Place[],
-  spendYen: number
+  spendUsd: number
 ): { sched: Schedule; overrides: Map<number, TransportMode> } {
   const overrides = new Map<number, TransportMode>();
   let sched = schedule(input, order, overrides);
   let guard = 0;
-  while (travelYen(sched) + spendYen > input.budgetCapYen && guard++ < 50) {
+  while (travelUsd(sched) + spendUsd > input.budgetCapUsd && guard++ < 50) {
     const legs: { index: number; leg: LegEstimate; from: LatLng; to: LatLng }[] =
       sched.stops.map((s, i) => ({
         index: i,
@@ -358,8 +358,8 @@ function repairBudget(
     let best: { index: number; mode: TransportMode; ratio: number } | null = null;
     for (const { index, leg, from, to } of legs) {
       for (const alt of input.legOptions(from, to)) {
-        if (alt.costYen >= leg.costYen) continue;
-        const saved = leg.costYen - alt.costYen;
+        if (alt.costUsd >= leg.costUsd) continue;
+        const saved = leg.costUsd - alt.costUsd;
         const added = Math.max(1, alt.durationMin - leg.durationMin);
         const ratio = saved / added;
         if (!best || ratio > best.ratio) best = { index, mode: alt.mode, ratio };
@@ -385,7 +385,7 @@ export function optimizeDay(input: OptimizeInput): DayPlan {
       stops: [],
       returnLeg: null,
       homeMin: input.dayStartMin,
-      totals: { travelMin: 0, waitMin: 0, travelYen: 0, spendYen: 0, totalYen: 0 },
+      totals: { travelMin: 0, waitMin: 0, travelUsd: 0, spendUsd: 0, totalUsd: 0 },
       warnings: [],
     };
   }
@@ -401,19 +401,19 @@ export function optimizeDay(input: OptimizeInput): DayPlan {
   order = repairClosingViolations(input, order, w, indexOf);
 
   // 3+4. Schedule with budget repair
-  const spendYen = order.reduce((sum, p) => sum + p.avgCostYen, 0);
-  const { sched } = repairBudget(input, order, spendYen);
+  const spendUsd = order.reduce((sum, p) => sum + p.avgCostUsd, 0);
+  const { sched } = repairBudget(input, order, spendUsd);
 
-  const tYen = travelYen(sched);
-  const totalYen = tYen + spendYen;
+  const tUsd = travelUsd(sched);
+  const totalUsd = tUsd + spendUsd;
   const travelMin =
     sched.stops.reduce((sum, s) => sum + s.leg.durationMin, 0) +
     (sched.returnLeg?.durationMin ?? 0);
   const waitMin = sched.stops.reduce((sum, s) => sum + s.waitMin, 0);
 
   const warnings: string[] = sched.stops.flatMap((s) => s.warnings);
-  if (totalYen > input.budgetCapYen) {
-    warnings.push(`Over budget by ${formatYen(totalYen - input.budgetCapYen)}`);
+  if (totalUsd > input.budgetCapUsd) {
+    warnings.push(`Over budget by ${formatUsd(totalUsd - input.budgetCapUsd)}`);
   }
   if (sched.homeMin > input.homeByMin) {
     warnings.push(
@@ -428,7 +428,7 @@ export function optimizeDay(input: OptimizeInput): DayPlan {
     stops: sched.stops,
     returnLeg: sched.returnLeg,
     homeMin: sched.homeMin,
-    totals: { travelMin, waitMin, travelYen: tYen, spendYen, totalYen },
+    totals: { travelMin, waitMin, travelUsd: tUsd, spendUsd, totalUsd },
     warnings,
   };
 }

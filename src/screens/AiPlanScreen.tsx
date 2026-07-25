@@ -14,7 +14,7 @@ import { CoverBlock } from '../components/CoverBlock';
 import { NavHeader } from '../components/NavHeader';
 import { TimelineNode } from '../components/IconTile';
 import type { Category, Place } from '../domain/types';
-import { formatDuration, formatYen } from '../lib/format';
+import { formatDuration, formatUsd } from '../lib/format';
 import type { RootStackParamList } from '../navigation';
 import { placesService } from '../services/places';
 import { useTripStore } from '../store/useTripStore';
@@ -34,32 +34,32 @@ interface Prompt {
  *  loop (prompt → plan → open) is fully walkable without a model. */
 const PROMPTS: Prompt[] = [
   {
-    label: 'A food day under ¥3,000',
-    title: 'Food day under ¥3,000',
+    label: 'A food day under $60',
+    title: 'Food day under $60',
     theme: 'food',
-    stopIds: ['tsukiji-outer-market', 'ichiran-shibuya', 'harajuku-gyoza-lou', 'omoide-yokocho'],
-    reply: "Here's a food-first day that stays under ¥3,000. Market breakfast, two ramen stops, then skewers in the alley.",
+    stopIds: ['ferry-building', 'la-taqueria', 'golden-gate-bakery', 'el-farolito'],
+    reply: "Here's a food-first day that stays under $60. Market breakfast, a Mission burrito, egg tarts in Chinatown, then late-night al pastor.",
   },
   {
     label: 'Quiet historical morning',
     title: 'Quiet historical morning',
     theme: 'historical',
-    stopIds: ['nezu-shrine', 'yanaka-ginza', 'sensoji', 'nakamise-street'],
-    reply: 'A calm morning through old Tokyo — start at Nezu before the crowds, drift down to Sensō-ji.',
+    stopIds: ['mission-dolores', 'cable-car-museum', 'chinatown-dragon-gate', 'coit-tower'],
+    reply: 'A calm morning through the old city — start at Mission Dolores before the crowds, drift up to Coit Tower.',
   },
   {
     label: 'Parks and slow coffee',
     title: 'Parks and slow coffee',
     theme: 'nature',
-    stopIds: ['shinjuku-gyoen', 'streamer-shibuya', 'yoyogi-park'],
-    reply: 'Two big parks with a slow coffee in between. Easy pace, lots of green.',
+    stopIds: ['japanese-tea-garden', 'sightglass-coffee', 'dolores-park'],
+    reply: 'Two big green spaces with a slow coffee in between. Easy pace, lots of park.',
   },
 ];
 
 interface Turn {
   prompt: Prompt;
   stops: Place[];
-  costYen: number;
+  costUsd: number;
   durationMin: number;
 }
 
@@ -83,10 +83,10 @@ export function AiPlanScreen({ navigation }: Props) {
     const stops = prompt.stopIds
       .map((id) => places.get(id))
       .filter((p): p is Place => !!p);
-    const costYen = stops.reduce((s, p) => s + p.avgCostYen, 0);
+    const costUsd = stops.reduce((s, p) => s + p.avgCostUsd, 0);
     const durationMin =
       stops.reduce((s, p) => s + p.visitDurationMin, 0) + (stops.length - 1) * 18;
-    setTurns((t) => [...t, { prompt, stops, costYen, durationMin }]);
+    setTurns((t) => [...t, { prompt, stops, costUsd, durationMin }]);
     setDraft('');
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 60);
   };
@@ -126,7 +126,7 @@ export function AiPlanScreen({ navigation }: Props) {
               <View style={styles.planMeta}>
                 <Text style={styles.planMetaText}>
                   {turn.stops.length} stops · {formatDuration(turn.durationMin)} · about{' '}
-                  {formatYen(turn.costYen)}
+                  {formatUsd(turn.costUsd)}
                 </Text>
               </View>
               <View style={styles.planStops}>

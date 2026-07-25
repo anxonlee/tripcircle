@@ -38,7 +38,7 @@ export interface FeedPost {
   /** Ordered POI ids that make up the day. */
   stopIds: string[];
   durationMin: number;
-  costYen: number;
+  costUsd: number;
   saves: number;
   clones: number;
   postedAgo: string;
@@ -75,7 +75,7 @@ export interface Trip {
   placeIds: string[];
   /** Per-city legs for multi-stay trips. */
   stays?: TripStay[];
-  costYen: number;
+  costUsd: number;
   /** Feed post this trip was cloned from, if any. */
   clonedFromTitle?: string;
 }
@@ -84,7 +84,7 @@ export interface Trip {
 export interface CostShare {
   user: User;
   /** What they actually paid up front. */
-  paidYen: number;
+  paidUsd: number;
 }
 
 /** A visited-city stamp in the travel passport (Phase 3). */

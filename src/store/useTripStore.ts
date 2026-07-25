@@ -13,10 +13,10 @@ interface TripState {
   startPlace: StartPlace | null;
   selectedPlaceIds: string[];
   goal: Goal;
-  /** Day window + budget (minutes since midnight / yen). Fixed defaults for now. */
+  /** Day window + budget (minutes since midnight / USD). Fixed defaults for now. */
   dayStartMin: number;
   homeByMin: number;
-  budgetCapYen: number;
+  budgetCapUsd: number;
   setStartPlace: (sp: StartPlace | null) => void;
   togglePlace: (id: string) => void;
   setSelection: (ids: string[]) => void;
@@ -32,7 +32,7 @@ export const useTripStore = create<TripState>()(
       goal: 'balanced',
       dayStartMin: 9 * 60,
       homeByMin: 21 * 60,
-      budgetCapYen: 15000,
+      budgetCapUsd: 150,
       setStartPlace: (sp) => set({ startPlace: sp }),
       togglePlace: (id) =>
         set((s) => ({
@@ -53,7 +53,7 @@ export const useTripStore = create<TripState>()(
         goal: s.goal,
         dayStartMin: s.dayStartMin,
         homeByMin: s.homeByMin,
-        budgetCapYen: s.budgetCapYen,
+        budgetCapUsd: s.budgetCapUsd,
       }),
     }
   )

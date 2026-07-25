@@ -47,7 +47,7 @@ export function DiscoverScreen({ navigation }: Props) {
       <View style={styles.header}>
         <View style={styles.headerText}>
           <Text style={styles.title}>Discover</Text>
-          <Text style={styles.subtitle}>Day plans people made in Tokyo</Text>
+          <Text style={styles.subtitle}>Day plans people made in the Bay Area</Text>
         </View>
         <Pressable
           style={({ pressed }) => [styles.postBtn, pressed && styles.postPressed]}

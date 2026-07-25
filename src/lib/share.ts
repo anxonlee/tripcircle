@@ -1,6 +1,6 @@
 import { Share } from 'react-native';
 import type { FeedPost, Trip } from '../domain/social';
-import { formatDuration, formatYen } from './format';
+import { formatDuration, formatUsd } from './format';
 
 /**
  * Native OS share sheet (Instagram, Messages, Mail, AirDrop, copy link…).
@@ -21,7 +21,7 @@ export function sharePost(post: FeedPost): Promise<void> {
   return share(
     `${post.title} — a ${post.stopIds.length}-stop day in ${post.city} (${formatDuration(
       post.durationMin
-    )}, about ${formatYen(post.costYen)}) on TripCircle`,
+    )}, about ${formatUsd(post.costUsd)}) on TripCircle`,
     `${BASE}/p/${post.id}`
   );
 }

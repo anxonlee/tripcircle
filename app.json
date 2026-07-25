@@ -7,9 +7,14 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.tripcircle.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "TripCircle uses your location only to suggest nearby public landmarks as a starting point. Your exact address is never stored."
+      }
     },
     "android": {
+      "package": "com.tripcircle.app",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",

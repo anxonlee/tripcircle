@@ -15,7 +15,7 @@ import { NavHeader } from '../components/NavHeader';
 import { TimelineNode } from '../components/IconTile';
 import type { FeedPost } from '../domain/social';
 import type { Place } from '../domain/types';
-import { formatDuration, formatYen } from '../lib/format';
+import { formatDuration, formatUsd } from '../lib/format';
 import type { RootStackParamList } from '../navigation';
 import { placesService } from '../services/places';
 import { socialService } from '../services/social';
@@ -46,7 +46,7 @@ export function PublishScreen({ route, navigation }: Props) {
     });
   }, [stopIds]);
 
-  const costYen = useMemo(() => stops.reduce((s, p) => s + p.avgCostYen, 0), [stops]);
+  const costUsd = useMemo(() => stops.reduce((s, p) => s + p.avgCostUsd, 0), [stops]);
   const durationMin = useMemo(
     () => stops.reduce((s, p) => s + p.visitDurationMin, 0) + Math.max(0, stops.length - 1) * 18,
     [stops]
@@ -65,7 +65,7 @@ export function PublishScreen({ route, navigation }: Props) {
       blurb: blurb.trim() || `A ${stops.length}-stop day in ${city}.`,
       stopIds,
       durationMin,
-      costYen,
+      costUsd,
       saves: 0,
       clones: 0,
       postedAgo: 'now',
@@ -123,7 +123,7 @@ export function PublishScreen({ route, navigation }: Props) {
 
         <View style={styles.summary}>
           <Text style={styles.summaryText}>
-            {stops.length} stops · {formatDuration(durationMin)} · about {formatYen(costYen)}
+            {stops.length} stops · {formatDuration(durationMin)} · about {formatUsd(costUsd)}
           </Text>
         </View>
         <View style={styles.stops}>

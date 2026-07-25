@@ -2,14 +2,17 @@ import type { LatLng, LegEstimate, TransportMode } from '../../domain/types';
 import { haversineKm } from '../../lib/geo';
 
 /**
- * Mock speed + cost tables approximating Tokyo travel. Pure and synchronous
+ * Mock speed + cost tables approximating Bay Area travel. Pure and synchronous
  * so the optimizer can consume it directly; MockRoutingService wraps it in
  * the async RoutingService interface.
  *
  * Model per mode:
  *  - speed is door-to-door effective speed over straight-line distance
  *  - overhead covers waiting/hailing/station access
- *  - transit fare mimics the metro's stepped fares; taxi mimics metered fare
+ *  - transit mimics Muni's flat fare stepping up to BART's distance-based
+ *    fare on longer hops; taxi mimics a rideshare fare
+ *
+ * Fares are 2026: Muni single ride $2.85 (Clipper), BART averages $5.18.
  */
 const MODE_TABLE: Record<
   TransportMode,
@@ -21,19 +24,19 @@ const MODE_TABLE: Record<
     cost: () => 0,
   },
   transit: {
-    speedKmH: 20,
-    overheadMin: 9,
+    speedKmH: 16,
+    overheadMin: 10,
     cost: (km) => {
-      if (km <= 3) return 180;
-      if (km <= 7) return 210;
-      if (km <= 11) return 260;
-      return 320;
+      if (km <= 8) return 2.85; // Muni flat fare, in-city
+      if (km <= 20) return 4.5; // short BART hop
+      if (km <= 40) return 6.5;
+      return 9.0; // across the bay / down the Peninsula
     },
   },
   taxi: {
-    speedKmH: 24,
-    overheadMin: 4,
-    cost: (km) => 500 + Math.max(0, km - 1.1) * 400,
+    speedKmH: 26,
+    overheadMin: 5,
+    cost: (km) => 7 + Math.max(0, km - 1) * 2.4,
   },
 };
 
@@ -53,7 +56,7 @@ export function estimateLeg(
     mode,
     distanceKm: km,
     durationMin: Math.ceil((km / t.speedKmH) * 60 + t.overheadMin),
-    costYen: Math.round(t.cost(km)),
+    costUsd: Math.round(t.cost(km)),
   };
 }
 
@@ -67,5 +70,5 @@ export function legOptions(from: LatLng, to: LatLng): LegEstimate[] {
   if (km <= MAX_WALK_KM) options.push(estimateLeg(from, to, 'walk'));
   if (km >= MIN_TRANSIT_KM) options.push(estimateLeg(from, to, 'transit'));
   options.push(estimateLeg(from, to, 'taxi'));
-  return options.sort((a, b) => a.costYen - b.costYen);
+  return options.sort((a, b) => a.costUsd - b.costUsd);
 }

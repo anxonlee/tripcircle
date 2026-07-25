@@ -1,7 +1,7 @@
-/** "¥1,340" — manual separator so we don't depend on Intl availability. */
-export function formatYen(n: number): string {
+/** "$18" / "$1,340" — manual separator so we don't depend on Intl availability. */
+export function formatUsd(n: number): string {
   const rounded = Math.round(n);
-  return `¥${String(rounded).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
+  return `$${String(rounded).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
 }
 
 /** "820" / "1.8k" / "3.1k" — compact counts for feed stats. */

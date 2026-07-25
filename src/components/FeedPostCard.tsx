@@ -2,7 +2,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { FeedPost } from '../domain/social';
-import { formatCount, formatDuration, formatYen } from '../lib/format';
+import { formatCount, formatDuration, formatUsd } from '../lib/format';
 import { categoryColors, categoryLabels, colors, tint } from '../theme/colors';
 import { Avatar } from './Avatar';
 import { CoverBlock } from './CoverBlock';
@@ -71,7 +71,7 @@ export function FeedPostCard({
 
         <View style={styles.metaRow}>
           <Meta icon="clock-outline" text={formatDuration(post.durationMin)} />
-          <Meta icon="wallet-outline" text={formatYen(post.costYen)} />
+          <Meta icon="wallet-outline" text={formatUsd(post.costUsd)} />
           <Meta icon="map-marker-outline" text={`${post.stopIds.length} stops`} />
         </View>
 

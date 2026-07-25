@@ -9,7 +9,7 @@ import { IconTile } from './IconTile';
 export const CARD_HEIGHT = 76;
 export const CARD_GAP = 9;
 
-const PRICE = ['Free', '¥', '¥¥', '¥¥¥', '¥¥¥¥'];
+const PRICE = ['Free', '$', '$$', '$$$', '$$$$'];
 
 /** "Open now" logic incl. past-midnight closers (close > 24:00). */
 function openStatus(p: Place): { open: boolean; text: string } {

@@ -43,7 +43,7 @@ export function ShareChooserScreen({ navigation }: Props) {
   const shareDay = () =>
     navigation.replace('Publish', {
       title: 'My day out',
-      city: 'Tokyo',
+      city: 'San Francisco',
       themes: dayThemes,
       stopIds: selectedIds,
     });
