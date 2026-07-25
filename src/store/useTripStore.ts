@@ -11,13 +11,18 @@ import type { Goal } from '../lib/optimizer';
  */
 interface TripState {
   startPlace: StartPlace | null;
+  /**
+   * PRD §3.1 ephemeral mode: the start place came from current GPS and must
+   * never be written to storage. Enforced in `partialize` below.
+   */
+  startPlaceEphemeral: boolean;
   selectedPlaceIds: string[];
   goal: Goal;
   /** Day window + budget (minutes since midnight / USD). Fixed defaults for now. */
   dayStartMin: number;
   homeByMin: number;
   budgetCapUsd: number;
-  setStartPlace: (sp: StartPlace | null) => void;
+  setStartPlace: (sp: StartPlace | null, opts?: { ephemeral?: boolean }) => void;
   togglePlace: (id: string) => void;
   setSelection: (ids: string[]) => void;
   clearSelection: () => void;
@@ -28,12 +33,14 @@ export const useTripStore = create<TripState>()(
   persist(
     (set) => ({
       startPlace: null,
+      startPlaceEphemeral: false,
       selectedPlaceIds: [],
       goal: 'balanced',
       dayStartMin: 9 * 60,
       homeByMin: 21 * 60,
       budgetCapUsd: 150,
-      setStartPlace: (sp) => set({ startPlace: sp }),
+      setStartPlace: (sp, opts) =>
+        set({ startPlace: sp, startPlaceEphemeral: opts?.ephemeral ?? false }),
       togglePlace: (id) =>
         set((s) => ({
           selectedPlaceIds: s.selectedPlaceIds.includes(id)
@@ -48,7 +55,8 @@ export const useTripStore = create<TripState>()(
       name: 'tripcircle-trip',
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (s) => ({
-        startPlace: s.startPlace,
+        // Ephemeral GPS anchors are never persisted (PRD §3.1).
+        startPlace: s.startPlaceEphemeral ? null : s.startPlace,
         selectedPlaceIds: s.selectedPlaceIds,
         goal: s.goal,
         dayStartMin: s.dayStartMin,

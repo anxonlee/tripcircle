@@ -1,16 +1,16 @@
+import { config } from '../config';
 import type { LatLng, LegEstimate, TransportMode } from '../domain/types';
 import * as mockTransport from './mock/transport';
 
 /**
  * THE provider boundary for routing/directions (PRD §12). Components and
- * stores may only get travel estimates through this interface. A real
- * provider (Google Directions, GTFS, …) later implements this same class.
+ * stores may only get travel estimates through this interface.
  *
  * The optimizer is pure/synchronous, so it does NOT call this interface at
- * plan time. Instead it takes a `LegOptionsFn`; `getLegOptionsFn()` hands the
- * app a snapshot function to inject. With a real async provider this becomes
- * "prefetch the leg matrix, then return a sync lookup" — the optimizer never
- * changes.
+ * plan time. Instead it takes a `LegOptionsFn`. `getLegOptionsFn(points)`
+ * prefetches whatever the provider needs for those points and returns a plain
+ * synchronous lookup — the mock ignores the argument, the Google provider uses
+ * it to fetch one distance matrix per mode. The optimizer never changes.
  */
 export type LegOptionsFn = (from: LatLng, to: LatLng) => LegEstimate[];
 
@@ -18,8 +18,11 @@ export interface RoutingService {
   estimateLeg(from: LatLng, to: LatLng, mode: TransportMode): Promise<LegEstimate>;
   /** All sensible mode options for a leg, cheapest-first. */
   legOptions(from: LatLng, to: LatLng): Promise<LegEstimate[]>;
-  /** Synchronous leg estimator for the optimizer to consume. */
-  getLegOptionsFn(): Promise<LegOptionsFn>;
+  /**
+   * Synchronous leg estimator for the optimizer.
+   * @param points every location the plan will route between (anchor + stops).
+   */
+  getLegOptionsFn(points?: LatLng[]): Promise<LegOptionsFn>;
 }
 
 class MockRoutingService implements RoutingService {
@@ -40,5 +43,17 @@ class MockRoutingService implements RoutingService {
   }
 }
 
+export const mockRoutingService: RoutingService = new MockRoutingService();
+
 /** App-wide singleton. Swap the implementation here, nowhere else. */
-export const routingService: RoutingService = new MockRoutingService();
+function resolveRoutingService(): RoutingService {
+  if (!config.useRealProviders) return mockRoutingService;
+  const { GoogleRoutingService } = require('./google/routingProvider') as
+    typeof import('./google/routingProvider');
+  return new GoogleRoutingService();
+}
+
+export const routingService: RoutingService = resolveRoutingService();
+
+/** True when travel times come from a live provider rather than estimates. */
+export const routingIsLive = config.useRealProviders;
