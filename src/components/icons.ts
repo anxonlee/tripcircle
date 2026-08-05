@@ -14,14 +14,20 @@ export const categoryIcon: Record<Category, IconName> = {
 
 export const transportIcon: Record<TransportMode, IconName> = {
   walk: 'walk',
-  transit: 'train',
-  taxi: 'taxi',
+  muni: 'bus',
+  bart: 'train',
+  ferry: 'ferry',
+  rideshare: 'car-lifted-pickup',
+  drive: 'car',
 };
 
 export const transportLabel: Record<TransportMode, string> = {
   walk: 'Walk',
-  transit: 'Transit',
-  taxi: 'Taxi',
+  muni: 'Muni',
+  bart: 'BART',
+  ferry: 'Ferry',
+  rideshare: 'Rideshare',
+  drive: 'Drive',
 };
 
 export const landmarkIcon: Record<Landmark['kind'], IconName> = {

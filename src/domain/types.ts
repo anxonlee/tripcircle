@@ -77,7 +77,20 @@ export interface StartPlace {
   location: LatLng;
 }
 
-export type TransportMode = 'walk' | 'transit' | 'taxi';
+/**
+ * Bay Area modes. Kept distinct rather than collapsed into one "transit"
+ * because their fare structures differ in kind, not degree — Muni charges a
+ * flat fare per boarding, BART charges by distance, the ferry charges per
+ * crossing, and driving charges nothing to board but pays for parking. An
+ * optimizer that cannot see those differences cannot trade between them.
+ */
+export type TransportMode =
+  | 'walk'
+  | 'muni'
+  | 'bart'
+  | 'ferry'
+  | 'rideshare'
+  | 'drive';
 
 /** One travel option between two points, for one mode. */
 export interface LegEstimate {

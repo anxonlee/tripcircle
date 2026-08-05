@@ -164,21 +164,38 @@ describe('per-leg transport choice', () => {
     { latitude: 35.0 + km / 111.19, longitude: 139.0 },
   ];
 
-  it('balanced walks short legs and takes transit on long legs', () => {
+  it('balanced walks short legs and rails long ones', () => {
     const [a, b] = near(1.0);
     expect(__internals.chooseLeg(mockLegOptions(a, b), 'balanced').mode).toBe('walk');
     const [c, d] = near(10.0);
-    expect(__internals.chooseLeg(mockLegOptions(c, d), 'balanced').mode).toBe('transit');
+    expect(__internals.chooseLeg(mockLegOptions(c, d), 'balanced').mode).toBe('bart');
   });
 
-  it('fastest takes taxis on long legs', () => {
+  /**
+   * At 10km a rideshare is only ~2 min quicker than BART for roughly $24 more,
+   * so the "refuse an upgrade that saves almost nothing" rule keeps BART even
+   * under Fastest. That rule is why Fastest stays usable rather than simply
+   * calling a car for every leg.
+   */
+  it('fastest refuses a marginal rideshare upgrade over rail', () => {
     const [a, b] = near(10.0);
-    expect(__internals.chooseLeg(mockLegOptions(a, b), 'fastest').mode).toBe('taxi');
+    const pick = __internals.chooseLeg(mockLegOptions(a, b), 'fastest');
+    expect(pick.mode).toBe('bart');
   });
 
-  it('fastest refuses a taxi that saves almost nothing (short hop → walk)', () => {
+  it('fastest refuses a car that saves almost nothing (short hop → walk)', () => {
     const [a, b] = near(0.5);
     expect(__internals.chooseLeg(mockLegOptions(a, b), 'fastest').mode).toBe('walk');
+  });
+
+  it('driving undercuts a rideshare on price but costs time at the far end', () => {
+    const [a, b] = near(10.0);
+    const opts = mockLegOptions(a, b);
+    const drive = opts.find((o) => o.mode === 'drive')!;
+    const ride = opts.find((o) => o.mode === 'rideshare')!;
+    // No fare to board, but parking is paid in money and in search time.
+    expect(drive.costUsd).toBeLessThan(ride.costUsd);
+    expect(drive.durationMin).toBeGreaterThan(ride.durationMin);
   });
 
   it('fastest plan is never slower, balanced plan is never pricier', () => {

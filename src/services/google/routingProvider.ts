@@ -3,11 +3,20 @@ import * as mockTransport from '../mock/transport';
 import type { LegOptionsFn, RoutingService } from '../routing';
 import { fetchJson, googleUrl } from './http';
 
-/** Google's mode names for the Distance Matrix API. */
+/**
+ * Google's Distance Matrix travel modes. Several of our modes share one Google
+ * mode — Muni, BART and the ferry are all `transit` to Google, and rideshare
+ * and driving are both `driving` — so we query each Google mode once and reuse
+ * the result, then apply our own fare model on top. Google returns transit
+ * fares where it has them, but cannot tell us which operator was used.
+ */
 const GOOGLE_MODE: Record<TransportMode, string> = {
   walk: 'walking',
-  transit: 'transit',
-  taxi: 'driving',
+  muni: 'transit',
+  bart: 'transit',
+  ferry: 'transit',
+  rideshare: 'driving',
+  drive: 'driving',
 };
 
 interface MatrixResponse {
@@ -25,6 +34,7 @@ interface MatrixResponse {
 /** Same caps as the mock model, so mode choice stays comparable. */
 const MAX_WALK_KM = 3.5;
 const MIN_TRANSIT_KM = 0.6;
+const MIN_DRIVE_KM = 1.5;
 
 /** Rideshare pricing isn't in the Maps APIs, so we estimate from real driving. */
 function rideshareUsd(km: number, min: number): number {
@@ -66,7 +76,9 @@ export class GoogleRoutingService implements RoutingService {
   async getLegOptionsFn(points: LatLng[] = []): Promise<LegOptionsFn> {
     if (points.length < 2) return mockTransport.legOptions;
 
-    const modes: TransportMode[] = ['walk', 'transit', 'taxi'];
+    const modes: TransportMode[] = [
+      'walk', 'muni', 'bart', 'ferry', 'rideshare', 'drive',
+    ];
     const tables = await Promise.all(
       modes.map((m) =>
         this.fetchMatrix(points, points, m).catch(
@@ -86,7 +98,12 @@ export class GoogleRoutingService implements RoutingService {
         if (hit) {
           // Apply the same "is this mode sensible here" rules as the mock.
           if (mode === 'walk' && hit.distanceKm > MAX_WALK_KM) continue;
-          if (mode === 'transit' && hit.distanceKm < MIN_TRANSIT_KM) continue;
+          if (
+            (mode === 'muni' || mode === 'bart') &&
+            hit.distanceKm < MIN_TRANSIT_KM
+          )
+            continue;
+          if (mode === 'drive' && hit.distanceKm < MIN_DRIVE_KM) continue;
           out.push(hit);
         } else {
           const f = fallback.find((o) => o.mode === mode);
@@ -124,15 +141,19 @@ export class GoogleRoutingService implements RoutingService {
         const km = el.distance.value / 1000;
         const min = Math.ceil(el.duration.value / 60);
         let costUsd = 0;
-        if (mode === 'transit') {
-          // Google returns real fares for Bay Area transit when it has them.
-          costUsd = el.fare?.value ?? mockTransport.estimateLeg(
+        if (mode === 'muni' || mode === 'bart' || mode === 'ferry') {
+          // Google returns a real fare for some Bay Area transit trips, but
+          // never says which operator ran it, so it cannot be attributed to a
+          // specific mode. Our own fare model stays authoritative per mode.
+          costUsd = mockTransport.estimateLeg(
             origins[i],
             destinations[j],
-            'transit'
+            mode
           ).costUsd;
-        } else if (mode === 'taxi') {
+        } else if (mode === 'rideshare') {
           costUsd = rideshareUsd(km, min);
+        } else if (mode === 'drive') {
+          costUsd = mockTransport.estimateLeg(origins[i], destinations[j], 'drive').costUsd;
         }
         table.set(keyOf(origins[i], destinations[j]), {
           mode,

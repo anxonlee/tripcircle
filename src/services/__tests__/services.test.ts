@@ -38,20 +38,53 @@ describe('geo', () => {
 });
 
 describe('mock transport tables', () => {
-  it('walking is free and slower than taxi', () => {
+  it('walking is free and slower than a rideshare', () => {
     const walk = estimateLeg(ferryBuilding, landsEnd, 'walk');
-    const taxi = estimateLeg(ferryBuilding, landsEnd, 'taxi');
+    const car = estimateLeg(ferryBuilding, landsEnd, 'rideshare');
     expect(walk.costUsd).toBe(0);
-    expect(taxi.costUsd).toBeGreaterThan(0);
-    expect(taxi.durationMin).toBeLessThan(walk.durationMin);
+    expect(car.costUsd).toBeGreaterThan(0);
+    expect(car.durationMin).toBeLessThan(walk.durationMin);
   });
 
-  it('long legs exclude walking; short legs exclude transit', () => {
+  it('long legs exclude walking; short legs exclude transit and driving', () => {
     const long = legOptions(ferryBuilding, landsEnd); // ~10km
     expect(long.map((o) => o.mode)).not.toContain('walk');
     const near = { latitude: 37.7965, longitude: -122.393 }; // ~130m
-    const short = legOptions(ferryBuilding, near);
-    expect(short.map((o) => o.mode)).not.toContain('transit');
+    const short = legOptions(ferryBuilding, near).map((o) => o.mode);
+    expect(short).not.toContain('muni');
+    expect(short).not.toContain('bart');
+    expect(short).not.toContain('drive');
+  });
+
+  describe('the Bay is a barrier, not a distance', () => {
+    // Ferry Building -> Jack London Square is only ~5km straight-line, but the
+    // straight line is water. Before the barrier existed this leg was walkable.
+    const jackLondon = { latitude: 37.79579, longitude: -122.27469 };
+
+    it('removes walking and Muni across the water', () => {
+      const modes = legOptions(ferryBuilding, jackLondon).map((o) => o.mode);
+      expect(modes).not.toContain('walk');
+      expect(modes).not.toContain('muni');
+    });
+
+    it('offers BART, ferry, rideshare and driving instead', () => {
+      const modes = legOptions(ferryBuilding, jackLondon).map((o) => o.mode);
+      expect(modes).toEqual(
+        expect.arrayContaining(['bart', 'ferry', 'rideshare', 'drive'])
+      );
+    });
+
+    it('prices the transbay ferry at its real fare, not a doubled one', () => {
+      const ferry = estimateLeg(ferryBuilding, jackLondon, 'ferry');
+      expect(ferry.costUsd).toBe(5.1); // SF Bay Ferry adult, verified 2026-08-04
+    });
+
+    it('has no BART across the Golden Gate', () => {
+      const sausalito = { latitude: 37.85903, longitude: -122.48547 };
+      const modes = legOptions(ferryBuilding, sausalito).map((o) => o.mode);
+      expect(modes).not.toContain('bart');
+      expect(modes).toContain('ferry');
+    });
   });
 
   it('options are sorted cheapest-first and never empty', () => {
