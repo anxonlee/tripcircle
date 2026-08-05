@@ -283,13 +283,35 @@ describe('scale', () => {
     expect(elapsed).toBeLessThan(2000);
   });
 
-  it('degrades predictably well beyond spec (whole catalogue)', () => {
+  it('stays within a workable time budget on a pathological input', () => {
     const t0 = Date.now();
-    const plan = optimizeDay({ ...sfInput('balanced'), places: bayAreaPlaces });
-    const elapsed = Date.now() - t0;
-    expect(plan.stops).toHaveLength(bayAreaPlaces.length);
-    // ~5s for 500 stops: usable as a guard rail, unusable as a UX target.
-    // Documented so a regression that makes it quadratically worse is caught.
-    expect(elapsed).toBeLessThan(15000);
+    optimizeDay({ ...sfInput('balanced'), places: bayAreaPlaces });
+    // ~5s for the whole catalogue. This is a performance guard only — it makes
+    // no claim that the resulting plan is usable. See the test below.
+    expect(Date.now() - t0).toBeLessThan(15000);
+  });
+
+  /**
+   * KNOWN GAP — the day window and budget cap are advisory, not enforced.
+   * The optimizer schedules every place it is given and only warns when the
+   * result overruns; it never drops a stop to make the day fit. Handed the
+   * whole catalogue it returns a "day" that ends 28 days later and costs 60x
+   * the cap. This test pins that behaviour so the gap is visible rather than
+   * implied, and will need rewriting when the constraints become real.
+   */
+  it('documents that the day window is advisory, not a constraint', () => {
+    const homeByMin = 21 * 60; // the 9:00–21:00 window from baseInput
+    const plan = optimizeDay({
+      ...sfInput('balanced'),
+      places: bayAreaPlaces,
+      homeByMin,
+    });
+    const overrunDays = (plan.homeMin - homeByMin) / 1440;
+
+    expect(plan.stops).toHaveLength(bayAreaPlaces.length); // nothing dropped
+    expect(overrunDays).toBeGreaterThan(20);               // ~28 days late
+    expect(plan.totals.totalUsd).toBeGreaterThan(5000);    // cap is $150
+    // The only thing standing between the user and this nonsense is a warning.
+    expect(plan.warnings.join(' ')).toMatch(/past your/);
   });
 });
