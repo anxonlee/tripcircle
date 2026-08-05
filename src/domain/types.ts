@@ -47,6 +47,14 @@ export interface Place {
    */
   rating?: number;
   reviewCount?: number;
+  /**
+   * True when `openHours` is a category-level default rather than the venue's
+   * real hours. Bulk-imported places often have no hours tagged upstream, and
+   * a planner must not present a guessed window as fact.
+   */
+  hoursEstimated?: boolean;
+  /** OpenStreetMap object this record came from, e.g. "node/7025326100". */
+  osmRef?: string;
   description?: string;
 }
 

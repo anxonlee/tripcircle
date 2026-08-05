@@ -33,6 +33,9 @@ const BAY_AREA_REGION = {
   longitudeDelta: 0.13,
 };
 
+/** Upper bound on simultaneously drawn map pins — see markerPlaces. */
+const MAX_MARKERS = 120;
+
 const FILTERS: Category[] = [
   'food',
   'historical',
@@ -67,6 +70,7 @@ export function PlacesScreen({ navigation }: Props) {
   /** Live provider results; null means "show the local list". */
   const [searchHits, setSearchHits] = useState<Place[] | null>(null);
   const [searching, setSearching] = useState(false);
+  const [region, setRegion] = useState(BAY_AREA_REGION);
   const mapRef = useRef<MapView>(null);
   const listRef = useRef<FlatList<Place>>(null);
   const sheetRef = useRef<BottomSheet>(null);
@@ -112,6 +116,30 @@ export function PlacesScreen({ navigation }: Props) {
     );
   }, [places, searchHits, query, filter]);
 
+  /**
+   * The catalogue is ~500 places; rendering every one as a Marker makes the
+   * map unusable. Draw only what's in view, capped, and always keep the
+   * selected and highlighted pins regardless of where the camera is.
+   */
+  const markerPlaces = useMemo(() => {
+    const selected = new Set(selectedIds);
+    const inView = visiblePlaces.filter((p) => {
+      if (selected.has(p.id) || p.id === highlightedId) return true;
+      return (
+        Math.abs(p.location.latitude - region.latitude) <= region.latitudeDelta / 2 &&
+        Math.abs(p.location.longitude - region.longitude) <= region.longitudeDelta / 2
+      );
+    });
+    if (inView.length <= MAX_MARKERS) return inView;
+    // Too dense to draw: keep the ones nearest the middle of the screen.
+    return [...inView]
+      .sort(
+        (a, b) =>
+          haversineKm(a.location, region) - haversineKm(b.location, region)
+      )
+      .slice(0, MAX_MARKERS);
+  }, [visiblePlaces, region, selectedIds, highlightedId]);
+
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const snapPoints = useMemo(() => ['30%', '55%', '88%'], []);
 
@@ -140,6 +168,7 @@ export function PlacesScreen({ navigation }: Props) {
         initialRegion={BAY_AREA_REGION}
         mapPadding={{ top: insets.top + 90, left: 0, right: 0, bottom: 240 }}
         onPress={() => setHighlighted(null)}
+        onRegionChangeComplete={setRegion}
       >
         {startPlace && (
           <Marker
@@ -153,7 +182,7 @@ export function PlacesScreen({ navigation }: Props) {
             </PinSlot>
           </Marker>
         )}
-        {visiblePlaces.map((p) => {
+        {markerPlaces.map((p) => {
           const daySelected = selectedSet.has(p.id);
           const highlighted = highlightedId === p.id;
           const base = daySelected ? 28 : 24;
