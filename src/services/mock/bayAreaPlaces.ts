@@ -3,22 +3,37 @@ import type { Place } from '../../domain/types';
 const h = (hours: number, minutes = 0) => hours * 60 + minutes;
 
 /**
- * Mock POI dataset: 34 real Bay Area places with approximate coordinates,
- * hours, price levels, and visit durations. Stands in for the POI provider
- * until one is wired behind PlacesService.
+ * Seed POI dataset: 38 real Bay Area places.
  *
- * Costs are per-person USD: a typical meal, entry fee, or nothing for the
- * free outdoor spots. Hours are typical rather than authoritative — the real
- * provider supplies live hours.
+ * PROVENANCE — read before trusting any field here.
+ *
+ *  - `location` is verified against OpenStreetMap via the Nominatim search
+ *    API (queried 2026-08-04). Data © OpenStreetMap contributors, ODbL. If
+ *    these coordinates are ever displayed on non-OSM tiles, the attribution
+ *    obligation still applies — see PRD §12.
+ *  - `name`, `categories`, `priceLevel`, `avgCostUsd`, `visitDurationMin` and
+ *    `description` are hand-authored estimates, NOT sourced. Costs and visit
+ *    durations in particular are judgement calls, not measurements.
+ *  - `openHours` is a single typical daily window and is NOT authoritative.
+ *    Real venues vary by weekday and close on specific days — La Taqueria is
+ *    shut Mondays and Tuesdays, for instance — which this shape cannot
+ *    express. The live provider supplies real per-day hours.
+ *  - `rating` / `reviewCount` are deliberately ABSENT. Earlier revisions
+ *    carried invented values; they have been removed rather than guessed at,
+ *    because no free, licensable source supplies them. They are populated
+ *    only when a real provider is configured.
+ *
+ * Two entries were removed on 2026-08-04 after verification showed them
+ * permanently closed: Philz Coffee Mission (3101 24th St, closed Oct 2023)
+ * and Blue Bottle Coffee Mint Plaza. Venue status is volatile; this list
+ * is a demo seed and will rot without a live provider behind PlacesService.
  */
 export const bayAreaPlaces: Place[] = [
   // ——— Food ———
   {
     id: 'ferry-building',
-    rating: 4.6,
-    reviewCount: 18420,
     name: 'Ferry Building Marketplace',
-    location: { latitude: 37.7955, longitude: -122.3937 },
+    location: { latitude: 37.79555, longitude: -122.39347 },
     categories: ['food', 'shopping'],
     priceLevel: 2,
     avgCostUsd: 25,
@@ -28,10 +43,8 @@ export const bayAreaPlaces: Place[] = [
   },
   {
     id: 'la-taqueria',
-    rating: 4.5,
-    reviewCount: 9840,
     name: 'La Taqueria',
-    location: { latitude: 37.7509, longitude: -122.418 },
+    location: { latitude: 37.75087, longitude: -122.41816 },
     categories: ['food'],
     priceLevel: 1,
     avgCostUsd: 16,
@@ -41,10 +54,8 @@ export const bayAreaPlaces: Place[] = [
   },
   {
     id: 'el-farolito',
-    rating: 4.4,
-    reviewCount: 7210,
     name: 'El Farolito',
-    location: { latitude: 37.7522, longitude: -122.4182 },
+    location: { latitude: 37.75264, longitude: -122.41831 },
     categories: ['food'],
     priceLevel: 1,
     avgCostUsd: 14,
@@ -54,10 +65,8 @@ export const bayAreaPlaces: Place[] = [
   },
   {
     id: 'swan-oyster-depot',
-    rating: 4.6,
-    reviewCount: 5130,
     name: 'Swan Oyster Depot',
-    location: { latitude: 37.7906, longitude: -122.4212 },
+    location: { latitude: 37.79097, longitude: -122.42092 },
     categories: ['food'],
     priceLevel: 3,
     avgCostUsd: 48,
@@ -67,10 +76,8 @@ export const bayAreaPlaces: Place[] = [
   },
   {
     id: 'hog-island-oyster',
-    rating: 4.5,
-    reviewCount: 2360,
     name: 'Hog Island Oyster Co.',
-    location: { latitude: 37.7956, longitude: -122.3934 },
+    location: { latitude: 37.79593, longitude: -122.39353 },
     categories: ['food'],
     priceLevel: 3,
     avgCostUsd: 42,
@@ -80,10 +87,8 @@ export const bayAreaPlaces: Place[] = [
   },
   {
     id: 'zuni-cafe',
-    rating: 4.4,
-    reviewCount: 4180,
     name: 'Zuni Café',
-    location: { latitude: 37.7739, longitude: -122.4222 },
+    location: { latitude: 37.77356, longitude: -122.42165 },
     categories: ['food'],
     priceLevel: 3,
     avgCostUsd: 55,
@@ -93,10 +98,8 @@ export const bayAreaPlaces: Place[] = [
   },
   {
     id: 'house-of-prime-rib',
-    rating: 4.5,
-    reviewCount: 6890,
     name: 'House of Prime Rib',
-    location: { latitude: 37.7935, longitude: -122.4224 },
+    location: { latitude: 37.79339, longitude: -122.42254 },
     categories: ['food'],
     priceLevel: 4,
     avgCostUsd: 75,
@@ -106,10 +109,8 @@ export const bayAreaPlaces: Place[] = [
   },
   {
     id: 'golden-gate-bakery',
-    rating: 4.3,
-    reviewCount: 3940,
     name: 'Golden Gate Bakery',
-    location: { latitude: 37.7947, longitude: -122.4073 },
+    location: { latitude: 37.79641, longitude: -122.40686 },
     categories: ['food', 'cafe'],
     priceLevel: 1,
     avgCostUsd: 8,
@@ -121,10 +122,8 @@ export const bayAreaPlaces: Place[] = [
   // ——— Cafés ———
   {
     id: 'tartine-bakery',
-    rating: 4.5,
-    reviewCount: 11240,
     name: 'Tartine Bakery',
-    location: { latitude: 37.7614, longitude: -122.4241 },
+    location: { latitude: 37.76146, longitude: -122.42395 },
     categories: ['cafe', 'food'],
     priceLevel: 2,
     avgCostUsd: 18,
@@ -133,37 +132,9 @@ export const bayAreaPlaces: Place[] = [
     description: 'Morning buns and country loaf, two blocks off Dolores Park.',
   },
   {
-    id: 'blue-bottle-mint',
-    rating: 4.3,
-    reviewCount: 4620,
-    name: 'Blue Bottle Coffee — Mint Plaza',
-    location: { latitude: 37.7822, longitude: -122.4085 },
-    categories: ['cafe'],
-    priceLevel: 2,
-    avgCostUsd: 7,
-    openHours: { open: h(7), close: h(18) },
-    visitDurationMin: 30,
-    description: 'The flagship siphon bar on a quiet downtown plaza.',
-  },
-  {
-    id: 'philz-mission',
-    rating: 4.5,
-    reviewCount: 6310,
-    name: 'Philz Coffee — Mission',
-    location: { latitude: 37.7616, longitude: -122.4213 },
-    categories: ['cafe'],
-    priceLevel: 1,
-    avgCostUsd: 6,
-    openHours: { open: h(6), close: h(20) },
-    visitDurationMin: 25,
-    description: 'The original store. Order a Mint Mojito and drink it in the park.',
-  },
-  {
     id: 'ritual-coffee',
-    rating: 4.4,
-    reviewCount: 3080,
     name: 'Ritual Coffee Roasters',
-    location: { latitude: 37.7565, longitude: -122.4216 },
+    location: { latitude: 37.75643, longitude: -122.42125 },
     categories: ['cafe'],
     priceLevel: 2,
     avgCostUsd: 6,
@@ -173,10 +144,8 @@ export const bayAreaPlaces: Place[] = [
   },
   {
     id: 'sightglass-coffee',
-    rating: 4.4,
-    reviewCount: 3520,
     name: 'Sightglass Coffee',
-    location: { latitude: 37.7767, longitude: -122.409 },
+    location: { latitude: 37.77703, longitude: -122.40844 },
     categories: ['cafe'],
     priceLevel: 2,
     avgCostUsd: 7,
@@ -188,10 +157,8 @@ export const bayAreaPlaces: Place[] = [
   // ——— Historical & museums ———
   {
     id: 'alcatraz-island',
-    rating: 4.7,
-    reviewCount: 42800,
     name: 'Alcatraz Island',
-    location: { latitude: 37.8267, longitude: -122.423 },
+    location: { latitude: 37.82672, longitude: -122.42276 },
     categories: ['historical'],
     priceLevel: 3,
     avgCostUsd: 48,
@@ -201,10 +168,8 @@ export const bayAreaPlaces: Place[] = [
   },
   {
     id: 'coit-tower',
-    rating: 4.5,
-    reviewCount: 14300,
     name: 'Coit Tower',
-    location: { latitude: 37.8024, longitude: -122.4058 },
+    location: { latitude: 37.80238, longitude: -122.40583 },
     categories: ['historical', 'nature'],
     priceLevel: 1,
     avgCostUsd: 12,
@@ -214,10 +179,8 @@ export const bayAreaPlaces: Place[] = [
   },
   {
     id: 'palace-of-fine-arts',
-    rating: 4.7,
-    reviewCount: 16900,
     name: 'Palace of Fine Arts',
-    location: { latitude: 37.8029, longitude: -122.4484 },
+    location: { latitude: 37.80292, longitude: -122.4484 },
     categories: ['historical', 'nature'],
     priceLevel: 0,
     avgCostUsd: 0,
@@ -227,10 +190,8 @@ export const bayAreaPlaces: Place[] = [
   },
   {
     id: 'mission-dolores',
-    rating: 4.4,
-    reviewCount: 2740,
     name: 'Mission Dolores',
-    location: { latitude: 37.7644, longitude: -122.4269 },
+    location: { latitude: 37.76435, longitude: -122.42695 },
     categories: ['historical'],
     priceLevel: 1,
     avgCostUsd: 10,
@@ -240,10 +201,8 @@ export const bayAreaPlaces: Place[] = [
   },
   {
     id: 'cable-car-museum',
-    rating: 4.6,
-    reviewCount: 5210,
     name: 'Cable Car Museum',
-    location: { latitude: 37.7947, longitude: -122.4116 },
+    location: { latitude: 37.79476, longitude: -122.41185 },
     categories: ['historical'],
     priceLevel: 0,
     avgCostUsd: 0,
@@ -253,10 +212,8 @@ export const bayAreaPlaces: Place[] = [
   },
   {
     id: 'chinatown-dragon-gate',
-    rating: 4.4,
-    reviewCount: 9870,
     name: 'Chinatown & Dragon Gate',
-    location: { latitude: 37.7908, longitude: -122.4056 },
+    location: { latitude: 37.79069, longitude: -122.40559 },
     categories: ['historical', 'shopping'],
     priceLevel: 0,
     avgCostUsd: 0,
@@ -266,10 +223,8 @@ export const bayAreaPlaces: Place[] = [
   },
   {
     id: 'sfmoma',
-    rating: 4.6,
-    reviewCount: 12600,
     name: 'SFMOMA',
-    location: { latitude: 37.7857, longitude: -122.4011 },
+    location: { latitude: 37.78592, longitude: -122.40074 },
     categories: ['historical'],
     priceLevel: 3,
     avgCostUsd: 30,
@@ -279,10 +234,8 @@ export const bayAreaPlaces: Place[] = [
   },
   {
     id: 'exploratorium',
-    rating: 4.7,
-    reviewCount: 11800,
     name: 'Exploratorium',
-    location: { latitude: 37.8017, longitude: -122.3973 },
+    location: { latitude: 37.8009, longitude: -122.39853 },
     categories: ['historical'],
     priceLevel: 3,
     avgCostUsd: 40,
@@ -292,10 +245,8 @@ export const bayAreaPlaces: Place[] = [
   },
   {
     id: 'cal-academy',
-    rating: 4.6,
-    reviewCount: 15400,
     name: 'California Academy of Sciences',
-    location: { latitude: 37.7699, longitude: -122.4661 },
+    location: { latitude: 37.76983, longitude: -122.46609 },
     categories: ['historical', 'nature'],
     priceLevel: 3,
     avgCostUsd: 45,
@@ -307,10 +258,8 @@ export const bayAreaPlaces: Place[] = [
   // ——— Nature & views ———
   {
     id: 'golden-gate-bridge',
-    rating: 4.8,
-    reviewCount: 58200,
     name: 'Golden Gate Bridge',
-    location: { latitude: 37.8199, longitude: -122.4783 },
+    location: { latitude: 37.81762, longitude: -122.47831 },
     categories: ['nature', 'historical'],
     priceLevel: 0,
     avgCostUsd: 0,
@@ -320,10 +269,8 @@ export const bayAreaPlaces: Place[] = [
   },
   {
     id: 'lands-end-trail',
-    rating: 4.8,
-    reviewCount: 12900,
     name: 'Lands End Trail',
-    location: { latitude: 37.7804, longitude: -122.5057 },
+    location: { latitude: 37.78384, longitude: -122.50675 },
     categories: ['nature'],
     priceLevel: 0,
     avgCostUsd: 0,
@@ -333,10 +280,8 @@ export const bayAreaPlaces: Place[] = [
   },
   {
     id: 'japanese-tea-garden',
-    rating: 4.6,
-    reviewCount: 10300,
     name: 'Japanese Tea Garden',
-    location: { latitude: 37.7702, longitude: -122.4703 },
+    location: { latitude: 37.77029, longitude: -122.47012 },
     categories: ['nature'],
     priceLevel: 1,
     avgCostUsd: 15,
@@ -346,10 +291,8 @@ export const bayAreaPlaces: Place[] = [
   },
   {
     id: 'dolores-park',
-    rating: 4.6,
-    reviewCount: 8940,
     name: 'Dolores Park',
-    location: { latitude: 37.7596, longitude: -122.4269 },
+    location: { latitude: 37.75972, longitude: -122.42713 },
     categories: ['nature'],
     priceLevel: 0,
     avgCostUsd: 0,
@@ -359,10 +302,8 @@ export const bayAreaPlaces: Place[] = [
   },
   {
     id: 'twin-peaks',
-    rating: 4.6,
-    reviewCount: 17200,
     name: 'Twin Peaks',
-    location: { latitude: 37.7544, longitude: -122.4477 },
+    location: { latitude: 37.75241, longitude: -122.44759 },
     categories: ['nature'],
     priceLevel: 0,
     avgCostUsd: 0,
@@ -372,10 +313,8 @@ export const bayAreaPlaces: Place[] = [
   },
   {
     id: 'crissy-field',
-    rating: 4.7,
-    reviewCount: 9600,
     name: 'Crissy Field & the Presidio',
-    location: { latitude: 37.8043, longitude: -122.4656 },
+    location: { latitude: 37.8046, longitude: -122.46661 },
     categories: ['nature'],
     priceLevel: 0,
     avgCostUsd: 0,
@@ -385,10 +324,8 @@ export const bayAreaPlaces: Place[] = [
   },
   {
     id: 'baker-beach',
-    rating: 4.6,
-    reviewCount: 7480,
     name: 'Baker Beach',
-    location: { latitude: 37.7936, longitude: -122.4836 },
+    location: { latitude: 37.79312, longitude: -122.48382 },
     categories: ['nature'],
     priceLevel: 0,
     avgCostUsd: 0,
@@ -398,10 +335,8 @@ export const bayAreaPlaces: Place[] = [
   },
   {
     id: 'muir-woods',
-    rating: 4.8,
-    reviewCount: 21600,
     name: 'Muir Woods National Monument',
-    location: { latitude: 37.8912, longitude: -122.5719 },
+    location: { latitude: 37.89639, longitude: -122.58022 },
     categories: ['nature'],
     priceLevel: 2,
     avgCostUsd: 15,
@@ -413,10 +348,8 @@ export const bayAreaPlaces: Place[] = [
   // ——— Shopping & neighbourhoods ———
   {
     id: 'union-square',
-    rating: 4.2,
-    reviewCount: 22400,
     name: 'Union Square',
-    location: { latitude: 37.788, longitude: -122.4075 },
+    location: { latitude: 37.78794, longitude: -122.40752 },
     categories: ['shopping'],
     priceLevel: 3,
     avgCostUsd: 0,
@@ -426,10 +359,8 @@ export const bayAreaPlaces: Place[] = [
   },
   {
     id: 'haight-ashbury',
-    rating: 4.3,
-    reviewCount: 11700,
     name: 'Haight-Ashbury',
-    location: { latitude: 37.7692, longitude: -122.4481 },
+    location: { latitude: 37.77003, longitude: -122.44698 },
     categories: ['shopping'],
     priceLevel: 2,
     avgCostUsd: 0,
@@ -439,10 +370,8 @@ export const bayAreaPlaces: Place[] = [
   },
   {
     id: 'valencia-street',
-    rating: 4.5,
-    reviewCount: 6200,
     name: 'Valencia Street',
-    location: { latitude: 37.7599, longitude: -122.4214 },
+    location: { latitude: 37.76177, longitude: -122.42186 },
     categories: ['shopping', 'cafe'],
     priceLevel: 2,
     avgCostUsd: 0,
@@ -452,10 +381,8 @@ export const bayAreaPlaces: Place[] = [
   },
   {
     id: 'pier-39',
-    rating: 4.3,
-    reviewCount: 39100,
     name: "Pier 39 & Fisherman's Wharf",
-    location: { latitude: 37.8087, longitude: -122.4098 },
+    location: { latitude: 37.80881, longitude: -122.41009 },
     categories: ['shopping', 'food'],
     priceLevel: 2,
     avgCostUsd: 22,
@@ -467,10 +394,8 @@ export const bayAreaPlaces: Place[] = [
   // ——— Nightlife ———
   {
     id: 'vesuvio-cafe',
-    rating: 4.5,
-    reviewCount: 4310,
     name: 'Vesuvio Cafe',
-    location: { latitude: 37.7975, longitude: -122.4065 },
+    location: { latitude: 37.79749, longitude: -122.40645 },
     categories: ['nightlife'],
     priceLevel: 2,
     avgCostUsd: 20,
@@ -480,10 +405,8 @@ export const bayAreaPlaces: Place[] = [
   },
   {
     id: 'smugglers-cove',
-    rating: 4.6,
-    reviewCount: 3870,
     name: "Smuggler's Cove",
-    location: { latitude: 37.7784, longitude: -122.4224 },
+    location: { latitude: 37.7794, longitude: -122.42334 },
     categories: ['nightlife'],
     priceLevel: 3,
     avgCostUsd: 34,
@@ -493,10 +416,8 @@ export const bayAreaPlaces: Place[] = [
   },
   {
     id: 'castro-theatre',
-    rating: 4.6,
-    reviewCount: 5640,
     name: 'Castro District & Theatre',
-    location: { latitude: 37.762, longitude: -122.4348 },
+    location: { latitude: 37.76199, longitude: -122.43475 },
     categories: ['nightlife', 'historical'],
     priceLevel: 2,
     avgCostUsd: 18,
@@ -506,10 +427,8 @@ export const bayAreaPlaces: Place[] = [
   },
   {
     id: 'the-fillmore',
-    rating: 4.7,
-    reviewCount: 6120,
     name: 'The Fillmore',
-    location: { latitude: 37.7841, longitude: -122.433 },
+    location: { latitude: 37.78408, longitude: -122.43317 },
     categories: ['nightlife'],
     priceLevel: 3,
     avgCostUsd: 55,
@@ -521,10 +440,8 @@ export const bayAreaPlaces: Place[] = [
   // ——— East Bay & Peninsula ———
   {
     id: 'uc-berkeley',
-    rating: 4.7,
-    reviewCount: 8930,
     name: 'UC Berkeley & the Campanile',
-    location: { latitude: 37.8721, longitude: -122.2578 },
+    location: { latitude: 37.87206, longitude: -122.25783 },
     categories: ['historical', 'nature'],
     priceLevel: 1,
     avgCostUsd: 5,
@@ -534,10 +451,8 @@ export const bayAreaPlaces: Place[] = [
   },
   {
     id: 'lake-merritt',
-    rating: 4.5,
-    reviewCount: 7240,
     name: 'Lake Merritt, Oakland',
-    location: { latitude: 37.802, longitude: -122.2585 },
+    location: { latitude: 37.80462, longitude: -122.25625 },
     categories: ['nature'],
     priceLevel: 0,
     avgCostUsd: 0,

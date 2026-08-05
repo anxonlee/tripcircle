@@ -156,8 +156,10 @@ export function toPlace(g: GooglePlace): Place | null {
     avgCostUsd: estimateCostUsd(categories, priceLevel),
     openHours: mapOpenHours(g),
     visitDurationMin: estimateVisitMin(categories),
-    rating: g.rating ?? 0,
-    reviewCount: g.userRatingCount ?? 0,
+    // Left undefined when Google has no rating — never defaulted to a number,
+    // so the UI can tell "unrated" apart from "rated zero".
+    rating: g.rating,
+    reviewCount: g.userRatingCount,
     description: g.editorialSummary?.text,
   };
 }

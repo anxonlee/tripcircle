@@ -40,9 +40,13 @@ export interface Place {
   openHours: OpenHours | null;
   /** Typical time spent at the place, minutes. */
   visitDurationMin: number;
-  /** Mock POI rating, 0–5 one decimal. */
-  rating: number;
-  reviewCount: number;
+  /**
+   * Provider-supplied rating, 0–5. Optional on purpose: the seed dataset has
+   * no licensable source for these, so they are absent rather than invented.
+   * Only a live POI provider populates them — never assume they exist.
+   */
+  rating?: number;
+  reviewCount?: number;
   description?: string;
 }
 

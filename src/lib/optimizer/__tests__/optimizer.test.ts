@@ -266,7 +266,7 @@ describe('day window', () => {
 // ——— Scale ————————————————————————————————————————————————————————
 
 describe('scale', () => {
-  it('plans all 40 mock places in well under a second per goal', () => {
+  it('plans the whole seed dataset in well under a second per goal', () => {
     const t0 = Date.now();
     const balanced = optimizeDay({
       ...sfInput('balanced'),
@@ -277,8 +277,9 @@ describe('scale', () => {
       places: bayAreaPlaces,
     });
     const elapsed = Date.now() - t0;
-    expect(balanced.stops).toHaveLength(40);
-    expect(fastest.stops).toHaveLength(40);
+    // Bound to the dataset, not a literal, so curating places can't break it.
+    expect(balanced.stops).toHaveLength(bayAreaPlaces.length);
+    expect(fastest.stops).toHaveLength(bayAreaPlaces.length);
     expect(elapsed).toBeLessThan(1000);
   });
 });

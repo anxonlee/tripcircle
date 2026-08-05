@@ -65,8 +65,16 @@ export function PlaceCard({
           {place.name}
         </Text>
         <Text style={styles.cardMeta} numberOfLines={1}>
-          <Text style={styles.cardRating}>★ {place.rating.toFixed(1)}</Text>
-          <Text> ({formatCount(place.reviewCount)}) · </Text>
+          {/* Ratings render only when a provider actually supplied them. */}
+          {place.rating != null && (
+            <>
+              <Text style={styles.cardRating}>★ {place.rating.toFixed(1)}</Text>
+              {place.reviewCount != null && (
+                <Text> ({formatCount(place.reviewCount)})</Text>
+              )}
+              <Text> · </Text>
+            </>
+          )}
           <Text>
             {place.categories
               .slice(0, 2)
