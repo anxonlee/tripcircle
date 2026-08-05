@@ -20,8 +20,12 @@ import { formatUsd } from '../format';
  *     tour when that resolves the violation.
  *  3. Schedule: walk the tour, choosing each leg's transport greedily by the
  *     goal; wait out not-yet-open places; collect warnings.
- *  4. Budget: while over cap, downgrade the leg with the best dollars-saved per
- *     minute-added ratio; warn if the cap still can't be met.
+ *
+ * Cost is REPORTED, NOT ENFORCED (PRD §3.3). An earlier revision had a fourth
+ * stage that downgraded legs until a day fit a budget cap; it was removed
+ * because transport is a small share of what a day costs once meals and
+ * admissions are counted, so capping transport constrains the wrong number.
+ * A user who wants a cheap day picks the Most Economic objective instead.
  */
 
 export type Goal = 'balanced' | 'fastest';
@@ -35,8 +39,6 @@ export interface OptimizeInput {
   dayStartMin: number;
   /** Target return time ("home by"). */
   homeByMin: number;
-  /** Cap on travel + at-place spend for the day. */
-  budgetCapUsd: number;
   goal: Goal;
   legOptions: LegOptionsFn;
 }
@@ -317,59 +319,14 @@ function repairClosingViolations(
   return current;
 }
 
-// ——— Budget repair ————————————————————————————————————————————————
+// ——— Totals ————————————————————————————————————————————————————————
 
+/** Travel spend across the tour, including the leg home. */
 function travelUsd(s: Schedule): number {
   return (
     s.stops.reduce((sum, st) => sum + st.leg.costUsd, 0) +
     (s.returnLeg?.costUsd ?? 0)
   );
-}
-
-/**
- * While over budget, downgrade the single leg whose cheaper alternative saves
- * the most dollars per added minute. Reschedules after each change (times shift).
- * May leave the plan over budget — that becomes a warning, not an error.
- */
-function repairBudget(
-  input: OptimizeInput,
-  order: Place[],
-  spendUsd: number
-): { sched: Schedule; overrides: Map<number, TransportMode> } {
-  const overrides = new Map<number, TransportMode>();
-  let sched = schedule(input, order, overrides);
-  let guard = 0;
-  while (travelUsd(sched) + spendUsd > input.budgetCapUsd && guard++ < 50) {
-    const legs: { index: number; leg: LegEstimate; from: LatLng; to: LatLng }[] =
-      sched.stops.map((s, i) => ({
-        index: i,
-        leg: s.leg,
-        from: i === 0 ? input.startPlace.location : sched.stops[i - 1].place.location,
-        to: s.place.location,
-      }));
-    if (sched.returnLeg && sched.stops.length > 0) {
-      legs.push({
-        index: sched.stops.length,
-        leg: sched.returnLeg,
-        from: sched.stops[sched.stops.length - 1].place.location,
-        to: input.startPlace.location,
-      });
-    }
-    let best: { index: number; mode: TransportMode; ratio: number } | null = null;
-    for (const { index, leg, from, to } of legs) {
-      for (const alt of input.legOptions(from, to)) {
-        if (alt.costUsd >= leg.costUsd) continue;
-        const saved = leg.costUsd - alt.costUsd;
-        const added = Math.max(1, alt.durationMin - leg.durationMin);
-        const ratio = saved / added;
-        if (!best || ratio > best.ratio) best = { index, mode: alt.mode, ratio };
-      }
-    }
-    if (!best) break;
-    overrides.set(best.index, best.mode);
-    sched = schedule(input, order, overrides);
-  }
-  return { sched, overrides };
 }
 
 // ——— Entry point ——————————————————————————————————————————————————
@@ -402,7 +359,7 @@ export function optimizeDay(input: OptimizeInput): DayPlan {
 
   // 3+4. Schedule with budget repair
   const spendUsd = order.reduce((sum, p) => sum + p.avgCostUsd, 0);
-  const { sched } = repairBudget(input, order, spendUsd);
+  const sched = schedule(input, order, new Map());
 
   const tUsd = travelUsd(sched);
   const totalUsd = tUsd + spendUsd;
@@ -412,9 +369,6 @@ export function optimizeDay(input: OptimizeInput): DayPlan {
   const waitMin = sched.stops.reduce((sum, s) => sum + s.waitMin, 0);
 
   const warnings: string[] = sched.stops.flatMap((s) => s.warnings);
-  if (totalUsd > input.budgetCapUsd) {
-    warnings.push(`Over budget by ${formatUsd(totalUsd - input.budgetCapUsd)}`);
-  }
   if (sched.homeMin > input.homeByMin) {
     warnings.push(
       `Home by ${formatTime(sched.homeMin)} — ${Math.round(sched.homeMin - input.homeByMin)} min past your ${formatTime(input.homeByMin)} target`

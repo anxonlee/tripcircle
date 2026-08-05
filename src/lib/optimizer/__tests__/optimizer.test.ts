@@ -39,7 +39,6 @@ function baseInput(overrides: Partial<OptimizeInput> = {}): OptimizeInput {
     places: [],
     dayStartMin: 9 * 60,
     homeByMin: 21 * 60,
-    budgetCapUsd: 100000, // effectively uncapped for tests that don't exercise budget
     goal: 'balanced',
     legOptions: walkOnly,
     ...overrides,
@@ -73,7 +72,6 @@ const sfInput = (goal: 'balanced' | 'fastest'): OptimizeInput =>
     places: sfSubset,
     goal,
     legOptions: mockLegOptions,
-    budgetCapUsd: 30000,
   });
 
 // ——— Structure ————————————————————————————————————————————————————
@@ -227,30 +225,26 @@ describe('open hours', () => {
   });
 });
 
-// ——— Budget ———————————————————————————————————————————————————————
+// ——— Cost reporting ——————————————————————————————————————————————
 
-describe('budget cap', () => {
-  it('downgrades taxi legs to transit to get under the cap', () => {
-    const far = makePlace('far-spot', 0.09); // ~10km: fastest wants taxi (~$29/leg)
-    const plan = optimizeDay(
-      baseInput({
-        places: [far],
-        goal: 'fastest',
-        legOptions: mockLegOptions,
-        budgetCapUsd: 20,
-      })
-    );
-    const modes = [plan.stops[0].leg.mode, plan.returnLeg!.mode];
-    expect(modes).not.toContain('taxi');
-    expect(plan.totals.totalUsd).toBeLessThanOrEqual(20);
-    expect(plan.warnings.join(' ')).not.toContain('Over budget');
+describe('cost reporting', () => {
+  /**
+   * PRD §3.3 removed the budget cap: cost is reported, never enforced. An
+   * earlier revision downgraded legs until a day fit a ceiling. A user who
+   * wants a cheap day picks the Most Economic objective instead.
+   */
+  it('reports day cost without capping or warning about it', () => {
+    const pricey = makePlace('pricey', 0.009, { avgCostUsd: 5000 });
+    const plan = optimizeDay(baseInput({ places: [pricey] }));
+    expect(plan.totals.totalUsd).toBe(5000);
+    expect(plan.warnings.join(' ')).not.toMatch(/budget/i);
   });
 
-  it('warns when the cap is unreachable (spend alone exceeds it)', () => {
-    const pricey = makePlace('pricey', 0.009, { avgCostUsd: 50 });
-    const plan = optimizeDay(baseInput({ places: [pricey], budgetCapUsd: 10 }));
-    expect(plan.totals.totalUsd).toBe(50);
-    expect(plan.warnings.join(' ')).toContain('Over budget by $40');
+  it('totals travel and at-place spend separately', () => {
+    const plan = optimizeDay(sfInput('balanced'));
+    const spend = plan.stops.reduce((s, x) => s + x.place.avgCostUsd, 0);
+    expect(plan.totals.spendUsd).toBe(spend);
+    expect(plan.totals.totalUsd).toBe(plan.totals.travelUsd + spend);
   });
 });
 

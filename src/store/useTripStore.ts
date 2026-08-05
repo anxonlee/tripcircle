@@ -18,10 +18,9 @@ interface TripState {
   startPlaceEphemeral: boolean;
   selectedPlaceIds: string[];
   goal: Goal;
-  /** Day window + budget (minutes since midnight / USD). Fixed defaults for now. */
+  /** Day window (minutes since midnight). Cost is reported, never capped. */
   dayStartMin: number;
   homeByMin: number;
-  budgetCapUsd: number;
   setStartPlace: (sp: StartPlace | null, opts?: { ephemeral?: boolean }) => void;
   togglePlace: (id: string) => void;
   setSelection: (ids: string[]) => void;
@@ -38,7 +37,6 @@ export const useTripStore = create<TripState>()(
       goal: 'balanced',
       dayStartMin: 9 * 60,
       homeByMin: 21 * 60,
-      budgetCapUsd: 150,
       setStartPlace: (sp, opts) =>
         set({ startPlace: sp, startPlaceEphemeral: opts?.ephemeral ?? false }),
       togglePlace: (id) =>
@@ -61,7 +59,6 @@ export const useTripStore = create<TripState>()(
         goal: s.goal,
         dayStartMin: s.dayStartMin,
         homeByMin: s.homeByMin,
-        budgetCapUsd: s.budgetCapUsd,
       }),
     }
   )

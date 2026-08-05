@@ -39,7 +39,6 @@ export function PlanScreen({ navigation }: Props) {
   const setGoal = useTripStore((s) => s.setGoal);
   const dayStartMin = useTripStore((s) => s.dayStartMin);
   const homeByMin = useTripStore((s) => s.homeByMin);
-  const budgetCapUsd = useTripStore((s) => s.budgetCapUsd);
   const highlightedId = useUiStore((s) => s.highlightedPlaceId);
   const setHighlighted = useUiStore((s) => s.setHighlighted);
 
@@ -78,14 +77,13 @@ export function PlanScreen({ navigation }: Props) {
       places: selectedPlaces,
       dayStartMin,
       homeByMin,
-      budgetCapUsd,
       legOptions: legOptionsFn,
     };
     return {
       balanced: optimizeDay({ ...base, goal: 'balanced' }),
       fastest: optimizeDay({ ...base, goal: 'fastest' }),
     };
-  }, [startPlace, selectedPlaces, legOptionsFn, dayStartMin, homeByMin, budgetCapUsd]);
+  }, [startPlace, selectedPlaces, legOptionsFn, dayStartMin, homeByMin]);
 
   const plan = plans?.[goal] ?? null;
 
