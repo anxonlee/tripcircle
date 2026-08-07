@@ -17,6 +17,7 @@ import { PlanScreen } from './src/screens/PlanScreen';
 import { PlanSuggestScreen } from './src/screens/PlanSuggestScreen';
 import { PrivacyScreen } from './src/screens/PrivacyScreen';
 import { SetupScreen } from './src/screens/SetupScreen';
+import { StartDayScreen } from './src/screens/StartDayScreen';
 import { StampScreen } from './src/screens/StampScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 import { useDiaryStore } from './src/store/useDiaryStore';
@@ -89,6 +90,7 @@ export default function App() {
             <Stack.Screen name="Tabs" component={Tabs} />
             <Stack.Screen name="Setup" component={SetupScreen} />
             <Stack.Screen name="DayPlan" component={PlanScreen} />
+            <Stack.Screen name="StartDay" component={StartDayScreen} />
             <Stack.Screen name="Stamp" component={StampScreen} />
             <Stack.Screen name="Privacy" component={PrivacyScreen} />
             <Stack.Screen name="Diary" component={DiaryScreen} />

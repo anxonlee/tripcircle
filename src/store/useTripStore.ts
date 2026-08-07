@@ -64,6 +64,16 @@ interface TripState {
    */
   suggestionBias: SuggestionBias;
   setSuggestionBias: (b: SuggestionBias) => void;
+  /**
+   * Which stop Start day is on. Persisted, because a day out runs for hours
+   * and the app is backgrounded at every one of them — holding this in screen
+   * state would put the user back at stop one each time they came back to it.
+   *
+   * Reset by every change to the selection: the step is an index into a day,
+   * so once the day is a different day the index means nothing.
+   */
+  startDayStep: number;
+  setStartDayStep: (step: number) => void;
 }
 
 export const useTripStore = create<TripState>()(
@@ -84,13 +94,16 @@ export const useTripStore = create<TripState>()(
           selectedPlaceIds: s.selectedPlaceIds.includes(id)
             ? s.selectedPlaceIds.filter((x) => x !== id)
             : [...s.selectedPlaceIds, id],
+          startDayStep: 0,
         })),
-      setSelection: (ids) => set({ selectedPlaceIds: ids }),
-      clearSelection: () => set({ selectedPlaceIds: [] }),
+      setSelection: (ids) => set({ selectedPlaceIds: ids, startDayStep: 0 }),
+      clearSelection: () => set({ selectedPlaceIds: [], startDayStep: 0 }),
       setGoal: (g) => set({ goal: g }),
       setDayWindow: (window) => set(clampDayWindow(window)),
       suggestionBias: 'familiar',
       setSuggestionBias: (b) => set({ suggestionBias: b }),
+      startDayStep: 0,
+      setStartDayStep: (step) => set({ startDayStep: Math.max(0, step) }),
     }),
     {
       name: 'tripcircle-trip',
@@ -104,6 +117,7 @@ export const useTripStore = create<TripState>()(
         homeByMin: s.homeByMin,
         hasCar: s.hasCar,
         suggestionBias: s.suggestionBias,
+        startDayStep: s.startDayStep,
       }),
     }
   )

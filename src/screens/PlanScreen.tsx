@@ -439,21 +439,6 @@ export function PlanScreen({ navigation }: Props) {
         <Text style={styles.backChipText}>Back</Text>
       </Pressable>
 
-      {/*
-        Handing the day to Google Maps is this screen's one clay action
-        (ui-guide §2). Publishing a plan is Phase 3 (PRD §14) — that share
-        affordance lives in src/_legacy until the feed and moderation
-        tooling ship.
-      */}
-      <Pressable
-        style={[styles.mapsChip, { top: insets.top + 8 }]}
-        onPress={openDayInMaps}
-        accessibilityRole="button"
-        accessibilityLabel="Open the whole day in Google Maps"
-      >
-        <MaterialCommunityIcons name="navigation-variant" size={16} color="#FFFFFF" />
-        <Text style={styles.mapsChipText}>Maps</Text>
-      </Pressable>
 
       <BottomSheet
         index={1}
@@ -501,6 +486,40 @@ export function PlanScreen({ navigation }: Props) {
             />
             <SummaryCell label="Travel" value={formatDuration(plan.totals.travelMin)} />
             <SummaryCell label="Home by" value={formatDayEnd(plan.homeMin)} />
+          </View>
+          {/*
+            The two things to do with a finished plan: walk it, or hand it to
+            something that will navigate it. Start day leads, because it is
+            the one that ends in a stamp and keeps the loop closed.
+
+            Both sit in the sheet rather than floating over the map. The Maps
+            hand-off used to be a chip pinned to the top corner, which put the
+            day's two end-actions on opposite sides of the screen with no
+            indication they were alternatives.
+          */}
+          <View style={styles.actionRow}>
+            <Pressable
+              style={styles.startBtn}
+              onPress={() => navigation.navigate('StartDay')}
+              accessibilityRole="button"
+              accessibilityLabel="Start the day, one stop at a time"
+            >
+              <MaterialCommunityIcons name="play" size={16} color="#FFFFFF" />
+              <Text style={styles.startBtnText}>Start day</Text>
+            </Pressable>
+            <Pressable
+              style={styles.mapsBtn}
+              onPress={openDayInMaps}
+              accessibilityRole="button"
+              accessibilityLabel="Open the whole day in Google Maps"
+            >
+              <MaterialCommunityIcons
+                name="navigation-variant-outline"
+                size={16}
+                color={colors.textPrimary}
+              />
+              <Text style={styles.mapsBtnText}>Maps</Text>
+            </Pressable>
           </View>
         </View>
 
@@ -666,24 +685,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
   },
   backChipText: { fontSize: 13, fontWeight: '500', color: colors.textPrimary },
-  /** Clay: the screen's one primary action (ui-guide §2). */
-  mapsChip: {
-    position: 'absolute',
-    right: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: colors.accent,
-    borderRadius: 24,
-    paddingLeft: 11,
-    paddingRight: 14,
-    height: 40,
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 5,
-    shadowOffset: { width: 0, height: 2 },
-  },
-  mapsChipText: { fontSize: 13, fontWeight: '500', color: '#FFFFFF' },
   sheet: {
     backgroundColor: colors.surface,
     borderTopLeftRadius: 20,
@@ -739,6 +740,29 @@ const styles = StyleSheet.create({
   objectiveLabelActive: { color: colors.textPrimary },
   objectiveMeta: { fontSize: 10, color: colors.textMuted, textAlign: 'center' },
   objectiveMetaActive: { color: colors.textSecondary },
+  actionRow: { flexDirection: 'row', gap: 8 },
+  startBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    height: 44,
+    borderRadius: 13,
+    backgroundColor: colors.accent,
+  },
+  startBtnText: { fontSize: 14, fontWeight: '500', color: '#FFFFFF' },
+  mapsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    height: 44,
+    paddingHorizontal: 16,
+    borderRadius: 13,
+    backgroundColor: colors.surfaceAlt,
+  },
+  mapsBtnText: { fontSize: 14, fontWeight: '500', color: colors.textPrimary },
   cellsRow: { flexDirection: 'row', gap: 8 },
   cell: {
     flex: 1,

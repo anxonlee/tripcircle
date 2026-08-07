@@ -8,7 +8,14 @@ export type RootStackParamList = {
    * of the same name could never be reached.
    */
   DayPlan: undefined;
-  Stamp: undefined;
+  /** Live guidance through the planned day, one stop at a time (PRD F7). */
+  StartDay: undefined;
+  /**
+   * `placeId` preselects the place and skips the search step — Start day
+   * knows which stop you are at, so asking again would be a worse flow than
+   * the one it came from. Without it the screen behaves as it always has.
+   */
+  Stamp: { placeId?: string } | undefined;
   Privacy: undefined;
   Diary: undefined;
   EditVisit: { visitId: string };

@@ -57,7 +57,17 @@ const GO_AGAIN: { value: WouldGoAgain; label: string; color: string; icon: strin
  * Location is read once, in the foreground, only when this screen asks for
  * it (§3A.6). Nothing is tracked and no fix is stored.
  */
-export function StampScreen({ navigation }: Props) {
+export function StampScreen({ navigation, route }: Props) {
+  /**
+   * Start day already knows which stop the user is at, so it names the place
+   * and this screen opens on the question rather than the search (F7).
+   *
+   * Its presence also means no location is read at all. Asking where someone
+   * is in order to identify a place they have already identified would be a
+   * permission prompt bought for nothing, and §3A.6 is that a fix is taken
+   * only when it answers something.
+   */
+  const presetId = route.params?.placeId;
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const stamp = useDiaryStore((s) => s.stamp);
@@ -109,6 +119,14 @@ export function StampScreen({ navigation }: Props) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      if (presetId) {
+        const preset = await placesService.getPlace(presetId);
+        if (cancelled || !preset) return;
+        setPlace(preset);
+        setShownPlace(preset);
+        setLocating(false);
+        return;
+      }
       // Foreground-only, one fix, nothing cached — see services/location.ts.
       // The fix arrives already snapped to ~100m, which is ample for "which
       // place am I standing in" and is the only precision §3.1 permits to
@@ -132,7 +150,7 @@ export function StampScreen({ navigation }: Props) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [presetId]);
 
   useEffect(() => {
     placesService.searchPlaces(query).then(setResults);
@@ -160,7 +178,11 @@ export function StampScreen({ navigation }: Props) {
       ...(note.trim() ? { note: note.trim() } : {}),
       ...(photoUri ? { photoUri } : {}),
     });
-    navigation.replace('Tabs');
+    // Stamping from Start day returns to the stop it came from, so the user
+    // carries on with the day. Stamping from the tab bar goes to the wall,
+    // where the new card lands.
+    if (presetId) navigation.goBack();
+    else navigation.replace('Tabs');
   };
 
   const past = useMemo(
