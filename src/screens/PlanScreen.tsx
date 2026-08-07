@@ -27,10 +27,11 @@ import {
   formatPriceBand,
 } from '../lib/format';
 import {
-  dayExceedsMapsWaypointCap,
+  droppedStopsWarning,
   dayOverviewMisstatesTransit,
   googleMapsDirUrl,
   googleMapsStopUrl,
+  waypointLimit,
 } from '../lib/maps';
 import {
   optimizeDay,
@@ -198,19 +199,28 @@ export function PlanScreen({ navigation }: Props) {
    * Hand the whole day to Google Maps.
    *
    * Two things Google cannot do are said out loud rather than discovered:
-   * its URL API carries nine waypoints, and its transit engine ignores
-   * waypoints altogether, so a BART day can only be drawn as a driving loop.
-   * Per-stop arrows in the timeline give the real transit directions.
+   * it carries nine waypoints in its own app and only three in a mobile
+   * browser, and its transit engine ignores waypoints altogether, so a BART
+   * day can only be drawn as a driving loop. Per-stop arrows in the timeline
+   * give the real transit directions.
+   *
+   * The limit is chosen by probing for the app rather than assumed, because
+   * the two targets differ by six stops and Google drops the excess in
+   * silence — the same day would arrive whole on one phone and quietly short
+   * on another.
    */
-  const openDayInMaps = useCallback(() => {
+  const openDayInMaps = useCallback(async () => {
     if (!startPlace || !plan) return;
-    const url = googleMapsDirUrl(startPlace, plan);
+    // The https link opens either target; this only asks which one will take it.
+    const hasApp = await Linking.canOpenURL('comgooglemaps://').catch(() => false);
+    const { url, dropped } = googleMapsDirUrl(
+      startPlace,
+      plan,
+      waypointLimit(hasApp)
+    );
     const caveats: string[] = [];
-    if (dayExceedsMapsWaypointCap(plan)) {
-      caveats.push(
-        `Maps carries nine stops and this day has ${plan.stops.length}, so it will route the first nine.`
-      );
-    }
+    const droppedNote = droppedStopsWarning(dropped);
+    if (droppedNote) caveats.push(droppedNote);
     if (dayOverviewMisstatesTransit(plan)) {
       caveats.push(
         'Maps cannot draw a multi-stop transit route, so the loop opens as driving. Use the arrow on a stop for its real transit directions.'

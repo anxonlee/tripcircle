@@ -1,4 +1,9 @@
-import type { LatLng, StartPlace, TransportMode } from '../domain/types';
+import type {
+  CuratedPlace,
+  LatLng,
+  StartPlace,
+  TransportMode,
+} from '../domain/types';
 import type { DayPlan } from './optimizer';
 
 /**
@@ -12,7 +17,22 @@ import type { DayPlan } from './optimizer';
  * transport modes.
  */
 
-const coord = ({ latitude, longitude }: LatLng) => `${latitude},${longitude}`;
+/**
+ * Six decimal places, which is roughly 0.1 m — far finer than anything here
+ * needs, and chosen for that reason. Snapping harder would move a curated
+ * place off its own doorstep, and start places are already coarse-snapped to
+ * ~100 m by `makeStartPlace` (§3.1), so rounding again would blunt them
+ * twice.
+ *
+ * What it does remove is binary floating-point residue. Arithmetic on
+ * coordinates yields values like -122.41816000000002, and sending that to
+ * Google claims a precision of about a nanometre — noise in a URL, and more
+ * precision than the dataset has at any point.
+ */
+const coord = ({ latitude, longitude }: LatLng) => {
+  const round = (v: number) => Math.round(v * 1e6) / 1e6;
+  return `${round(latitude)},${round(longitude)}`;
+};
 
 /**
  * The Maps URL API accepts four travel modes, and the app models six. Muni,
@@ -29,14 +49,19 @@ const TRAVEL_MODE: Record<TransportMode, 'walking' | 'transit' | 'driving'> = {
 };
 
 /**
- * The Maps URL API caps intermediate waypoints at nine. A longer day still
- * opens — it is just routed through the first nine stops — so this trims
- * rather than refuses. `dayExceedsMapsWaypointCap` lets the UI say so.
+ * How many waypoints survive the hand-off.
+ *
+ * Google carries up to nine in its own app and three in a mobile browser, and
+ * drops the excess without saying so. Since the app opens only when it is
+ * installed, the same five-stop day arrives whole in one target and quietly
+ * short in the other — which is why the caller is told what was dropped
+ * rather than left to find out.
  */
-const MAX_WAYPOINTS = 9;
+export const WAYPOINT_LIMIT_APP = 9;
+export const WAYPOINT_LIMIT_BROWSER = 3;
 
-export function dayExceedsMapsWaypointCap(plan: DayPlan): boolean {
-  return plan.stops.length > MAX_WAYPOINTS;
+export function waypointLimit(googleMapsInstalled: boolean): number {
+  return googleMapsInstalled ? WAYPOINT_LIMIT_APP : WAYPOINT_LIMIT_BROWSER;
 }
 
 /**
@@ -63,16 +88,33 @@ export function dayOverviewMisstatesTransit(plan: DayPlan): boolean {
   return legs.some((l) => TRAVEL_MODE[l.mode] === 'transit');
 }
 
+export interface DayRoute {
+  url: string;
+  /** Stops that did not fit the waypoint limit. Empty when the day fits. */
+  dropped: CuratedPlace[];
+}
+
 /**
  * The whole day as one round trip: out from the anchor, through every stop in
  * plan order, back to the anchor.
+ *
+ * Origin and destination are both the start place because a day out comes
+ * back. That costs nothing — neither counts against the waypoint limit, which
+ * applies only to the stops between them.
+ *
+ * Returns what would not fit rather than a bare URL. The route must never
+ * differ silently from the day on screen, and a caller handed only a string
+ * has no way to honour that.
  */
-export function googleMapsDirUrl(startPlace: StartPlace, plan: DayPlan): string {
+export function googleMapsDirUrl(
+  startPlace: StartPlace,
+  plan: DayPlan,
+  limit: number = WAYPOINT_LIMIT_APP
+): DayRoute {
   const origin = coord(startPlace.location);
-  const waypoints = plan.stops
-    .slice(0, MAX_WAYPOINTS)
-    .map((s) => coord(s.place.location))
-    .join('|');
+  const places = plan.stops.map((s) => s.place);
+  const kept = places.slice(0, Math.max(0, limit));
+  const dropped = places.slice(kept.length);
 
   const params = new URLSearchParams({
     api: '1',
@@ -82,7 +124,25 @@ export function googleMapsDirUrl(startPlace: StartPlace, plan: DayPlan): string 
   });
 
   const base = `https://www.google.com/maps/dir/?${params.toString()}`;
-  return waypoints ? `${base}&waypoints=${encodeURIComponent(waypoints)}` : base;
+  const waypoints = kept.map((p) => coord(p.location)).join('|');
+  const url = waypoints
+    ? `${base}&waypoints=${encodeURIComponent(waypoints)}`
+    : base;
+
+  return { url, dropped };
+}
+
+/** What to tell the user before opening a route that will not carry the day. */
+export function droppedStopsWarning(dropped: CuratedPlace[]): string | null {
+  if (dropped.length === 0) return null;
+  const names = dropped.map((p) => p.name);
+  const list =
+    names.length === 1
+      ? names[0]
+      : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+  const is = names.length === 1 ? 'is' : 'are';
+  const it = names.length === 1 ? 'it' : 'them';
+  return `Google Maps will not carry the whole day. ${list} ${is} not in the route it opens — you still have ${it} here.`;
 }
 
 /**
