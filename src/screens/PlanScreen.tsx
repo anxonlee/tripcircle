@@ -4,6 +4,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -25,6 +26,12 @@ import {
   formatUsd,
   formatPriceBand,
 } from '../lib/format';
+import {
+  dayExceedsMapsWaypointCap,
+  dayOverviewMisstatesTransit,
+  googleMapsDirUrl,
+  googleMapsStopUrl,
+} from '../lib/maps';
 import {
   optimizeDay,
   type DayPlan,
@@ -187,6 +194,38 @@ export function PlanScreen({ navigation }: Props) {
     [selectedIds.length, togglePlace]
   );
 
+  /**
+   * Hand the whole day to Google Maps.
+   *
+   * Two things Google cannot do are said out loud rather than discovered:
+   * its URL API carries nine waypoints, and its transit engine ignores
+   * waypoints altogether, so a BART day can only be drawn as a driving loop.
+   * Per-stop arrows in the timeline give the real transit directions.
+   */
+  const openDayInMaps = useCallback(() => {
+    if (!startPlace || !plan) return;
+    const url = googleMapsDirUrl(startPlace, plan);
+    const caveats: string[] = [];
+    if (dayExceedsMapsWaypointCap(plan)) {
+      caveats.push(
+        `Maps carries nine stops and this day has ${plan.stops.length}, so it will route the first nine.`
+      );
+    }
+    if (dayOverviewMisstatesTransit(plan)) {
+      caveats.push(
+        'Maps cannot draw a multi-stop transit route, so the loop opens as driving. Use the arrow on a stop for its real transit directions.'
+      );
+    }
+    if (caveats.length === 0) {
+      Linking.openURL(url);
+      return;
+    }
+    Alert.alert('Opening in Google Maps', caveats.join('\n\n'), [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Open', onPress: () => Linking.openURL(url) },
+    ]);
+  }, [startPlace, plan]);
+
   const snapPoints = useMemo(() => ['35%', '60%', '90%'], []);
 
   /**
@@ -243,17 +282,36 @@ export function PlanScreen({ navigation }: Props) {
             </View>
             <View style={styles.stopTail}>
               <Text style={styles.stopTime}>{formatTime(s.arriveMin)}</Text>
-              <Pressable
-                onPress={() => removeStop(s.place.id, s.place.name)}
-                hitSlop={10}
-                style={styles.removeStop}
-              >
-                <MaterialCommunityIcons
-                  name="close"
-                  size={14}
-                  color={colors.textMuted}
-                />
-              </Pressable>
+              <View style={styles.stopActions}>
+                <Pressable
+                  onPress={() =>
+                    Linking.openURL(googleMapsStopUrl(s.place.location, s.leg.mode))
+                  }
+                  hitSlop={10}
+                  style={styles.stopAction}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Directions to ${s.place.name} in Google Maps`}
+                >
+                  <MaterialCommunityIcons
+                    name="navigation-variant-outline"
+                    size={14}
+                    color={colors.textSecondary}
+                  />
+                </Pressable>
+                <Pressable
+                  onPress={() => removeStop(s.place.id, s.place.name)}
+                  hitSlop={10}
+                  style={styles.stopAction}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Remove ${s.place.name} from the day`}
+                >
+                  <MaterialCommunityIcons
+                    name="close"
+                    size={14}
+                    color={colors.textMuted}
+                  />
+                </Pressable>
+              </View>
             </View>
           </Pressable>
         </View>
@@ -371,8 +429,21 @@ export function PlanScreen({ navigation }: Props) {
         <Text style={styles.backChipText}>Back</Text>
       </Pressable>
 
-      {/* Publishing a plan is Phase 3 (PRD §14) — the share affordance lives
-          in src/_legacy until the feed and moderation tooling ship. */}
+      {/*
+        Handing the day to Google Maps is this screen's one clay action
+        (ui-guide §2). Publishing a plan is Phase 3 (PRD §14) — that share
+        affordance lives in src/_legacy until the feed and moderation
+        tooling ship.
+      */}
+      <Pressable
+        style={[styles.mapsChip, { top: insets.top + 8 }]}
+        onPress={openDayInMaps}
+        accessibilityRole="button"
+        accessibilityLabel="Open the whole day in Google Maps"
+      >
+        <MaterialCommunityIcons name="navigation-variant" size={16} color="#FFFFFF" />
+        <Text style={styles.mapsChipText}>Maps</Text>
+      </Pressable>
 
       <BottomSheet
         index={1}
@@ -585,22 +656,24 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
   },
   backChipText: { fontSize: 13, fontWeight: '500', color: colors.textPrimary },
-  shareChip: {
+  /** Clay: the screen's one primary action (ui-guide §2). */
+  mapsChip: {
     position: 'absolute',
     right: 16,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.accent,
     borderRadius: 24,
     paddingLeft: 11,
-    paddingRight: 13,
+    paddingRight: 14,
     height: 40,
     shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 2 },
   },
+  mapsChipText: { fontSize: 13, fontWeight: '500', color: '#FFFFFF' },
   sheet: {
     backgroundColor: colors.surface,
     borderTopLeftRadius: 20,
@@ -703,7 +776,8 @@ const styles = StyleSheet.create({
   stopCost: { fontSize: 11, color: colors.textMuted, marginTop: 2 },
   stopTime: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
   stopTail: { alignItems: 'flex-end', gap: 6 },
-  removeStop: {
+  stopActions: { flexDirection: 'row', gap: 6 },
+  stopAction: {
     width: 22,
     height: 22,
     borderRadius: 11,
