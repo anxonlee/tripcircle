@@ -32,6 +32,30 @@ export type Goal = 'balanced' | 'fastest';
 
 export type LegOptionsFn = (from: LatLng, to: LatLng) => LegEstimate[];
 
+/**
+ * Narrow a leg estimator to the modes actually available on this outing.
+ *
+ * Routing answers "what is physically possible between these points"; this
+ * answers "what can *you* take". Driving is the case that matters: it is
+ * usually the cheapest way across the Bay and among the priciest ways to move
+ * two blocks, so leaving it in for someone without a car does not just add a
+ * rejected option — it changes which plan wins.
+ *
+ * Never returns an empty list. If the filter would remove everything, the
+ * unfiltered options are returned rather than leaving a leg unroutable.
+ */
+export function withAvailableModes(
+  fn: LegOptionsFn,
+  opts: { hasCar: boolean }
+): LegOptionsFn {
+  if (opts.hasCar) return fn;
+  return (from, to) => {
+    const all = fn(from, to);
+    const usable = all.filter((o) => o.mode !== 'drive');
+    return usable.length > 0 ? usable : all;
+  };
+}
+
 export interface OptimizeInput {
   startPlace: StartPlace;
   places: Place[];

@@ -13,6 +13,7 @@ import { formatTime } from '../lib/geo';
 import { formatDuration, formatUsd } from '../lib/format';
 import {
   optimizeDay,
+  withAvailableModes,
   type DayPlan,
   type Goal,
   type LegOptionsFn,
@@ -39,6 +40,8 @@ export function PlanScreen({ navigation }: Props) {
   const setGoal = useTripStore((s) => s.setGoal);
   const dayStartMin = useTripStore((s) => s.dayStartMin);
   const homeByMin = useTripStore((s) => s.homeByMin);
+  const hasCar = useTripStore((s) => s.hasCar);
+  const setHasCar = useTripStore((s) => s.setHasCar);
   const highlightedId = useUiStore((s) => s.highlightedPlaceId);
   const setHighlighted = useUiStore((s) => s.setHighlighted);
 
@@ -72,18 +75,19 @@ export function PlanScreen({ navigation }: Props) {
 
   const plans = useMemo<Record<Goal, DayPlan> | null>(() => {
     if (!startPlace || !legOptionsFn || selectedPlaces.length === 0) return null;
+    if (hasCar === null) return null; // ask first; do not guess a mode set
     const base = {
       startPlace,
       places: selectedPlaces,
       dayStartMin,
       homeByMin,
-      legOptions: legOptionsFn,
+      legOptions: withAvailableModes(legOptionsFn, { hasCar }),
     };
     return {
       balanced: optimizeDay({ ...base, goal: 'balanced' }),
       fastest: optimizeDay({ ...base, goal: 'fastest' }),
     };
-  }, [startPlace, selectedPlaces, legOptionsFn, dayStartMin, homeByMin]);
+  }, [startPlace, selectedPlaces, legOptionsFn, dayStartMin, homeByMin, hasCar]);
 
   const plan = plans?.[goal] ?? null;
 
@@ -116,6 +120,38 @@ export function PlanScreen({ navigation }: Props) {
             ? 'Save at least two places in Explore to plan a day'
             : 'Set a start place first'}
         </Text>
+        <Pressable style={styles.loadingBack} onPress={() => navigation.goBack()}>
+          <Text style={styles.loadingBackText}>Back</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  if (hasCar === null) {
+    return (
+      <View style={styles.ask}>
+        <MaterialCommunityIcons name="car-outline" size={26} color={colors.textSecondary} />
+        <Text style={styles.askTitle}>Do you have a car today?</Text>
+        <Text style={styles.askBody}>
+          It changes the plan a lot. Driving is usually the cheapest way across
+          the Bay and one of the priciest ways to go two blocks.
+        </Text>
+        <View style={styles.askRow}>
+          <Pressable
+            style={({ pressed }) => [styles.askBtn, pressed && styles.askBtnPressed]}
+            onPress={() => setHasCar(false)}
+          >
+            <MaterialCommunityIcons name="walk" size={17} color={colors.textPrimary} />
+            <Text style={styles.askBtnText}>No car</Text>
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [styles.askBtn, pressed && styles.askBtnPressed]}
+            onPress={() => setHasCar(true)}
+          >
+            <MaterialCommunityIcons name="car" size={17} color={colors.textPrimary} />
+            <Text style={styles.askBtnText}>Driving</Text>
+          </Pressable>
+        </View>
         <Pressable style={styles.loadingBack} onPress={() => navigation.goBack()}>
           <Text style={styles.loadingBackText}>Back</Text>
         </Pressable>
@@ -230,9 +266,25 @@ export function PlanScreen({ navigation }: Props) {
         <View style={styles.sheetTop}>
           <View style={styles.sheetHeaderText}>
             <Text style={styles.sheetTitle}>Day plan</Text>
-            <Text style={styles.sheetContext}>
-              From {startPlace.name} · leave {formatTime(plan.dayStartMin)}
-            </Text>
+            <View style={styles.contextRow}>
+              <Text style={styles.sheetContext}>
+                From {startPlace.name} · leave {formatTime(plan.dayStartMin)}
+              </Text>
+              <Pressable
+                onPress={() => setHasCar(!hasCar)}
+                hitSlop={8}
+                style={styles.carChip}
+              >
+                <MaterialCommunityIcons
+                  name={hasCar ? 'car' : 'walk'}
+                  size={12}
+                  color={colors.textSecondary}
+                />
+                <Text style={styles.carChipText}>
+                  {hasCar ? 'Driving' : 'No car'}
+                </Text>
+              </Pressable>
+            </View>
           </View>
           <View style={styles.toggleRow}>
             <ToggleSeg
@@ -430,6 +482,52 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   loadingBackText: { fontSize: 13, fontWeight: '500', color: colors.textSecondary },
+  ask: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+    gap: 10,
+  },
+  askTitle: { fontSize: 17, fontWeight: '500', color: colors.textPrimary },
+  askBody: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  askRow: { flexDirection: 'row', gap: 10, marginTop: 6 },
+  askBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    paddingHorizontal: 18,
+    paddingVertical: 11,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surface,
+  },
+  askBtnPressed: { backgroundColor: colors.surfaceAlt },
+  askBtnText: { fontSize: 14, fontWeight: '500', color: colors.textPrimary },
+  contextRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginTop: 1,
+  },
+  carChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.surfaceInput,
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  carChipText: { fontSize: 11, fontWeight: '500', color: colors.textSecondary },
   backChip: {
     position: 'absolute',
     left: 16,

@@ -21,6 +21,15 @@ interface TripState {
   /** Day window (minutes since midnight). Cost is reported, never capped. */
   dayStartMin: number;
   homeByMin: number;
+  /**
+   * Whether a car is available for this outing. `null` means we have not asked
+   * yet — the Plan screen asks before it computes anything, because offering
+   * driving to someone without a car produces a plan they cannot follow, and
+   * the difference is large: driving is usually the cheapest way across the
+   * Bay and the most expensive way to move two blocks.
+   */
+  hasCar: boolean | null;
+  setHasCar: (v: boolean | null) => void;
   setStartPlace: (sp: StartPlace | null, opts?: { ephemeral?: boolean }) => void;
   togglePlace: (id: string) => void;
   setSelection: (ids: string[]) => void;
@@ -37,6 +46,8 @@ export const useTripStore = create<TripState>()(
       goal: 'balanced',
       dayStartMin: 9 * 60,
       homeByMin: 21 * 60,
+      hasCar: null,
+      setHasCar: (v) => set({ hasCar: v }),
       setStartPlace: (sp, opts) =>
         set({ startPlace: sp, startPlaceEphemeral: opts?.ephemeral ?? false }),
       togglePlace: (id) =>
@@ -59,6 +70,7 @@ export const useTripStore = create<TripState>()(
         goal: s.goal,
         dayStartMin: s.dayStartMin,
         homeByMin: s.homeByMin,
+        hasCar: s.hasCar,
       }),
     }
   )

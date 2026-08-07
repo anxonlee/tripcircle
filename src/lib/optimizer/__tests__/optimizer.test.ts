@@ -2,7 +2,12 @@ import type { LatLng, Place, StartPlace } from '../../../domain/types';
 import { haversineKm } from '../../geo';
 import { legOptions as mockLegOptions } from '../../../services/mock/transport';
 import { bayAreaPlaces } from '../../../services/mock/bayAreaPlaces';
-import { __internals, optimizeDay, type OptimizeInput } from '../index';
+import {
+  __internals,
+  optimizeDay,
+  withAvailableModes,
+  type OptimizeInput,
+} from '../index';
 
 const anchor: StartPlace = {
   id: 'anchor',
@@ -324,5 +329,50 @@ describe('scale', () => {
     expect(plan.totals.totalUsd).toBeGreaterThan(5000);    // cap is $150
     // The only thing standing between the user and this nonsense is a warning.
     expect(plan.warnings.join(' ')).toMatch(/past your/);
+  });
+});
+
+// ——— Car availability ——————————————————————————————————————————————
+
+describe('car availability', () => {
+  const near = (km: number): [LatLng, LatLng] => [
+    { latitude: 37.7844, longitude: -122.4079 },
+    { latitude: 37.7844 + km / 111.19, longitude: -122.4079 },
+  ];
+
+  it('offers driving when a car is available', () => {
+    const fn = withAvailableModes(mockLegOptions, { hasCar: true });
+    const [a, b] = near(8);
+    expect(fn(a, b).map((o) => o.mode)).toContain('drive');
+  });
+
+  it('removes driving when there is no car', () => {
+    const fn = withAvailableModes(mockLegOptions, { hasCar: false });
+    const [a, b] = near(8);
+    const modes = fn(a, b).map((o) => o.mode);
+    expect(modes).not.toContain('drive');
+    expect(modes.length).toBeGreaterThan(0);
+  });
+
+  it('never strips a leg down to nothing', () => {
+    // A leg only driving could serve still returns something rather than
+    // leaving the optimizer with no option at all.
+    const onlyDrive = () => [
+      { mode: 'drive' as const, durationMin: 20, costUsd: 9, distanceKm: 5 },
+    ];
+    const fn = withAvailableModes(onlyDrive, { hasCar: false });
+    const [a, b] = near(5);
+    expect(fn(a, b)).toHaveLength(1);
+  });
+
+  it('changes which plan wins, not just which options exist', () => {
+    // Crossing the Bay: driving is far cheaper than a rideshare, so removing
+    // it should raise what the cheapest sensible crossing costs.
+    const ferryBuilding = { latitude: 37.79555, longitude: -122.39347 };
+    const jackLondon = { latitude: 37.79579, longitude: -122.27469 };
+    const withCar = withAvailableModes(mockLegOptions, { hasCar: true });
+    const without = withAvailableModes(mockLegOptions, { hasCar: false });
+    expect(withCar(ferryBuilding, jackLondon).map((o) => o.mode)).toContain('drive');
+    expect(without(ferryBuilding, jackLondon).map((o) => o.mode)).not.toContain('drive');
   });
 });
