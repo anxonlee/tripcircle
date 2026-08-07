@@ -1,5 +1,5 @@
 import { config } from '../config';
-import type { Landmark, LatLng, Place } from '../domain/types';
+import type { Landmark, LatLng, CuratedPlace } from '../domain/types';
 import { bayAreaLandmarks } from './mock/landmarks';
 import { bayAreaPlaces } from './mock/bayAreaPlaces';
 
@@ -18,10 +18,10 @@ export interface PlacesService {
    * Every place the app can resolve by id — the curated set plus anything
    * discovered through search. Screens map stored ids back to places with it.
    */
-  listPlaces(): Promise<Place[]>;
-  getPlace(id: string): Promise<Place | undefined>;
+  listPlaces(): Promise<CuratedPlace[]>;
+  getPlace(id: string): Promise<CuratedPlace | undefined>;
   /** Free-text place search, biased toward `near` when supplied. */
-  searchPlaces(query: string, near?: LatLng): Promise<Place[]>;
+  searchPlaces(query: string, near?: LatLng): Promise<CuratedPlace[]>;
 }
 
 class MockPlacesService implements PlacesService {
@@ -31,15 +31,15 @@ class MockPlacesService implements PlacesService {
     return bayAreaLandmarks.filter((lm) => lm.name.toLowerCase().includes(q));
   }
 
-  async listPlaces(): Promise<Place[]> {
+  async listPlaces(): Promise<CuratedPlace[]> {
     return bayAreaPlaces;
   }
 
-  async getPlace(id: string): Promise<Place | undefined> {
+  async getPlace(id: string): Promise<CuratedPlace | undefined> {
     return bayAreaPlaces.find((p) => p.id === id);
   }
 
-  async searchPlaces(query: string): Promise<Place[]> {
+  async searchPlaces(query: string): Promise<CuratedPlace[]> {
     const q = query.trim().toLowerCase();
     if (!q) return bayAreaPlaces;
     return bayAreaPlaces.filter((p) => p.name.toLowerCase().includes(q));

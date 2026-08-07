@@ -1,4 +1,4 @@
-import type { Landmark, LatLng, Place } from '../../domain/types';
+import type { Landmark, LatLng, CuratedPlace } from '../../domain/types';
 import { bayAreaLandmarks } from '../mock/landmarks';
 import { bayAreaPlaces } from '../mock/bayAreaPlaces';
 import type { PlacesService } from '../places';
@@ -31,7 +31,7 @@ const SEARCH_RADIUS_M = 30000;
  * permitted to persist is `google_place_id`, and it belongs on the Curation
  * record that links it to an `osm_id` — not in a blob of cached place content.
  *
- * An earlier revision persisted whole Place objects to AsyncStorage so that
+ * An earlier revision persisted whole CuratedPlace objects to AsyncStorage so that
  * search results stayed resolvable across restarts. That was convenient and
  * not permissible, so it is gone. The consequence is intended: results found
  * through Google survive only the current session, while the Foundation and
@@ -39,9 +39,9 @@ const SEARCH_RADIUS_M = 30000;
  */
 export class GooglePlacesService implements PlacesService {
   /** Session-scoped only. Never serialised. */
-  private discovered = new Map<string, Place>();
+  private discovered = new Map<string, CuratedPlace>();
 
-  private remember(places: Place[]): void {
+  private remember(places: CuratedPlace[]): void {
     for (const p of places) this.discovered.set(p.id, p);
   }
 
@@ -53,14 +53,14 @@ export class GooglePlacesService implements PlacesService {
     return bayAreaLandmarks.filter((lm) => lm.name.toLowerCase().includes(q));
   }
 
-  async listPlaces(): Promise<Place[]> {
-    const seen = new Map<string, Place>();
+  async listPlaces(): Promise<CuratedPlace[]> {
+    const seen = new Map<string, CuratedPlace>();
     for (const p of bayAreaPlaces) seen.set(p.id, p);
     for (const p of this.discovered.values()) seen.set(p.id, p);
     return [...seen.values()];
   }
 
-  async getPlace(id: string): Promise<Place | undefined> {
+  async getPlace(id: string): Promise<CuratedPlace | undefined> {
     return (
       this.discovered.get(id) ?? bayAreaPlaces.find((p) => p.id === id)
     );
@@ -70,7 +70,7 @@ export class GooglePlacesService implements PlacesService {
    * Text search against the real Places index, biased to the user's anchor.
    * Results are cached so they stay resolvable by id afterwards.
    */
-  async searchPlaces(query: string, near?: LatLng): Promise<Place[]> {
+  async searchPlaces(query: string, near?: LatLng): Promise<CuratedPlace[]> {
     const q = query.trim();
     if (!q) return [];
     try {
@@ -94,7 +94,7 @@ export class GooglePlacesService implements PlacesService {
       );
       const places = (res.places ?? [])
         .map(toPlace)
-        .filter((p): p is Place => p !== null);
+        .filter((p): p is CuratedPlace => p !== null);
       this.remember(places);
       return places;
     } catch {

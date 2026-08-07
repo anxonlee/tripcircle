@@ -18,7 +18,7 @@ import MapView, { Marker } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CategoryPin, PIN_ANCHOR, PinSlot, StartPin } from '../components/CategoryPin';
 import { CARD_GAP, CARD_HEIGHT, PlaceCard } from '../components/PlaceCard';
-import type { Category, Place } from '../domain/types';
+import type { Category, CuratedPlace } from '../domain/types';
 import { haversineKm } from '../lib/geo';
 import type { RootStackParamList, TabParamList } from '../navigation';
 import { placeSearchIsLive, placesService } from '../services/places';
@@ -64,15 +64,15 @@ export function PlacesScreen({ navigation }: Props) {
   const highlightedId = useUiStore((s) => s.highlightedPlaceId);
   const setHighlighted = useUiStore((s) => s.setHighlighted);
 
-  const [places, setPlaces] = useState<Place[]>([]);
+  const [places, setPlaces] = useState<CuratedPlace[]>([]);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Category | null>(null);
   /** Live provider results; null means "show the local list". */
-  const [searchHits, setSearchHits] = useState<Place[] | null>(null);
+  const [searchHits, setSearchHits] = useState<CuratedPlace[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [region, setRegion] = useState(BAY_AREA_REGION);
   const mapRef = useRef<MapView>(null);
-  const listRef = useRef<FlatList<Place>>(null);
+  const listRef = useRef<FlatList<CuratedPlace>>(null);
   const sheetRef = useRef<BottomSheet>(null);
 
   useEffect(() => {
@@ -110,7 +110,7 @@ export function PlacesScreen({ navigation }: Props) {
     const base = searchHits ?? places;
     return base.filter(
       (p) =>
-        (!filter || p.categories.includes(filter)) &&
+        (!filter || p.themes.includes(filter)) &&
         // Live hits are already matched server-side; only filter locally.
         (searchHits !== null || !q || p.name.toLowerCase().includes(q))
     );
@@ -143,7 +143,7 @@ export function PlacesScreen({ navigation }: Props) {
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const snapPoints = useMemo(() => ['30%', '55%', '88%'], []);
 
-  const focusPlace = (p: Place) => {
+  const focusPlace = (p: CuratedPlace) => {
     setHighlighted(p.id);
     mapRef.current?.animateToRegion(
       { ...p.location, latitudeDelta: 0.03, longitudeDelta: 0.03 },
@@ -151,7 +151,7 @@ export function PlacesScreen({ navigation }: Props) {
     );
   };
 
-  const onMarkerPress = (p: Place) => {
+  const onMarkerPress = (p: CuratedPlace) => {
     focusPlace(p);
     const index = visiblePlaces.findIndex((x) => x.id === p.id);
     if (index >= 0) {
@@ -197,7 +197,7 @@ export function PlacesScreen({ navigation }: Props) {
               onPress={() => onMarkerPress(p)}
             >
               <PinSlot label={highlighted ? p.name : undefined}>
-                <CategoryPin categories={p.categories} size={size} />
+                <CategoryPin categories={p.themes} size={size} />
               </PinSlot>
             </Marker>
           );
@@ -272,13 +272,13 @@ export function PlacesScreen({ navigation }: Props) {
         <BottomSheetFlatList
           ref={listRef as never}
           data={visiblePlaces}
-          keyExtractor={(p: Place) => p.id}
+          keyExtractor={(p: CuratedPlace) => p.id}
           getItemLayout={(_: unknown, index: number) => ({
             length: CARD_HEIGHT + CARD_GAP,
             offset: (CARD_HEIGHT + CARD_GAP) * index,
             index,
           })}
-          renderItem={({ item }: { item: Place }) => (
+          renderItem={({ item }: { item: CuratedPlace }) => (
             <PlaceCard
               place={item}
               selected={selectedSet.has(item.id)}

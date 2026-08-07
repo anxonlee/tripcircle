@@ -42,3 +42,18 @@ export function formatTime(minutes: number): string {
   const mm = String(Math.round(m % 60)).padStart(2, '0');
   return `${h}:${mm}`;
 }
+
+/**
+ * The finish time of a day, which may legitimately fall past midnight.
+ *
+ * `formatTime` wraps modulo 1440. That is right for a closing time of 26:00,
+ * which reads correctly as "2:00", and wrong for anything naming the end of
+ * *this* day: a day finishing at 24:16 rendered as "0:16" reads as a quarter
+ * past midnight this morning — sixteen hours before the day it belongs to,
+ * and the one number on the screen a user would plan around.
+ *
+ * Use this for the finish. Use `formatTime` everywhere else.
+ */
+export function formatDayEnd(minutes: number): string {
+  return minutes >= 1440 ? `${formatTime(minutes)} next day` : formatTime(minutes);
+}

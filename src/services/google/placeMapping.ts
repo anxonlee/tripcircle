@@ -1,4 +1,6 @@
-import type { Category, OpenHours, Place } from '../../domain/types';
+import { bandFor } from '../../domain/types';
+import type { Category, OpenHours, CuratedPlace } from '../../domain/types';
+import { nearestDistrict } from '../../domain/districts';
 
 /** Shape of a Places API (New) place, limited to the fields we request. */
 export interface GooglePlace {
@@ -142,24 +144,42 @@ export function mapOpenHours(g: GooglePlace, today = new Date().getDay()): OpenH
   return { open, close };
 }
 
-/** Convert a Google place into our domain Place, or null if unusable. */
-export function toPlace(g: GooglePlace): Place | null {
+/**
+ * Convert a Google place into our domain CuratedPlace, or null if unusable.
+ *
+ * `g.rating` and `g.userRatingCount` are deliberately dropped on the floor
+ * here rather than carried onto the returned record. PRD §12.2 makes Google
+ * ratings live-only: they may be read on a place-detail screen and must never
+ * reach storage or the optimizer, and `CuratedPlace` has no field for them
+ * precisely so this function cannot smuggle them through. They belong on
+ * `PlaceEnrichment`, fetched on detail open.
+ *
+ * `worthDetour` is false for the same reason it is false across the seed
+ * data: it is an editorial judgment, and deriving one from a crowd rating
+ * would launder exactly the value §12.2 excludes.
+ */
+export function toPlace(g: GooglePlace): CuratedPlace | null {
   if (!g.id || !g.location || !g.displayName?.text) return null;
-  const categories = mapCategories(g);
-  const priceLevel = mapPriceLevel(g, categories);
+  const themes = mapCategories(g);
+  const priceLevel = mapPriceLevel(g, themes);
+  const location = {
+    latitude: g.location.latitude,
+    longitude: g.location.longitude,
+  };
   return {
     id: g.id,
     name: g.displayName.text,
-    location: { latitude: g.location.latitude, longitude: g.location.longitude },
-    categories,
+    location,
+    // Assigned by the same nearest-centroid rule as the seed data, so a
+    // discovered place lands in an existing wall cluster instead of beside it.
+    district: nearestDistrict(location),
+    themes,
     priceLevel,
-    avgCostUsd: estimateCostUsd(categories, priceLevel),
+    priceBand: bandFor(priceLevel),
+    avgCostUsd: estimateCostUsd(themes, priceLevel),
+    worthDetour: false,
     openHours: mapOpenHours(g),
-    visitDurationMin: estimateVisitMin(categories),
-    // Left undefined when Google has no rating — never defaulted to a number,
-    // so the UI can tell "unrated" apart from "rated zero".
-    rating: g.rating,
-    reviewCount: g.userRatingCount,
+    visitDurationMin: estimateVisitMin(themes),
     description: g.editorialSummary?.text,
   };
 }

@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CategoryPin, PIN_ANCHOR, PinSlot, StartPin } from '../components/CategoryPin';
 import { transportIcon, transportLabel } from '../components/icons';
 import { TimelineNode } from '../components/IconTile';
-import type { Place, TransportMode } from '../domain/types';
+import type { CuratedPlace, TransportMode } from '../domain/types';
 import { formatTime } from '../lib/geo';
 import { formatDuration, formatUsd } from '../lib/format';
 import {
@@ -24,7 +24,7 @@ import { routingService } from '../services/routing';
 import { useTripStore, useUiStore } from '../store/useTripStore';
 import { colors } from '../theme/colors';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Plan'>;
+type Props = NativeStackScreenProps<RootStackParamList, 'DayPlan'>;
 
 /**
  * Plan day — the optimizer's output made visible (ui-guide §1.4: never show
@@ -45,7 +45,7 @@ export function PlanScreen({ navigation }: Props) {
   const highlightedId = useUiStore((s) => s.highlightedPlaceId);
   const setHighlighted = useUiStore((s) => s.setHighlighted);
 
-  const [selectedPlaces, setSelectedPlaces] = useState<Place[]>([]);
+  const [selectedPlaces, setSelectedPlaces] = useState<CuratedPlace[]>([]);
   const [legOptionsFn, setLegOptionsFn] = useState<LegOptionsFn | null>(null);
   const mapRef = useRef<MapView>(null);
 
@@ -57,7 +57,7 @@ export function PlanScreen({ navigation }: Props) {
       const byId = new Map(all.map((p) => [p.id, p]));
       const picked = selectedIds
         .map((id) => byId.get(id))
-        .filter((p): p is Place => !!p);
+        .filter((p): p is CuratedPlace => !!p);
       setSelectedPlaces(picked);
 
       // Prefetch travel estimates for exactly the points this plan will route
@@ -222,7 +222,7 @@ export function PlanScreen({ navigation }: Props) {
             >
               <PinSlot label={highlighted ? s.place.name : undefined}>
                 <CategoryPin
-                  categories={s.place.categories}
+                  categories={s.place.themes}
                   size={highlighted ? 35 : 28}
                   label={String(s.order)}
                 />
@@ -240,22 +240,11 @@ export function PlanScreen({ navigation }: Props) {
         <Text style={styles.backChipText}>Back</Text>
       </Pressable>
 
-      <Pressable
-        style={[styles.shareChip, { top: insets.top + 8 }]}
-        onPress={() =>
-          navigation.navigate('Publish', {
-            title: 'My day out',
-            city: 'San Francisco',
-            themes: Array.from(
-              new Set(plan.stops.flatMap((s) => s.place.categories))
-            ).slice(0, 2),
-            stopIds: plan.stops.map((s) => s.place.id),
-          })
-        }
-      >
-        <MaterialCommunityIcons name="share-variant-outline" size={16} color={colors.textPrimary} />
-        <Text style={styles.backChipText}>Share</Text>
-      </Pressable>
+      {/*
+        Sharing a day was a Phase 2 feature and its target screen now lives in
+        `src/_legacy`. The control is removed rather than disabled: a button
+        that cannot go anywhere is worse than no button.
+      */}
 
       <BottomSheet
         index={1}
@@ -335,7 +324,7 @@ export function PlanScreen({ navigation }: Props) {
                 ]}
               >
                 <View style={styles.gutter}>
-                  <TimelineNode categories={s.place.categories} label={String(s.order)} />
+                  <TimelineNode categories={s.place.themes} label={String(s.order)} />
                 </View>
                 <View style={styles.stopBody}>
                   <Text style={styles.stopName} numberOfLines={1}>

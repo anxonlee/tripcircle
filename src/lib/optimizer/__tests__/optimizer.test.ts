@@ -1,4 +1,4 @@
-import type { LatLng, Place, StartPlace } from '../../../domain/types';
+import type { LatLng, CuratedPlace, StartPlace } from '../../../domain/types';
 import { haversineKm } from '../../geo';
 import { legOptions as mockLegOptions } from '../../../services/mock/transport';
 import { bayAreaPlaces } from '../../../services/mock/bayAreaPlaces';
@@ -13,7 +13,7 @@ const anchor: StartPlace = {
   id: 'anchor',
   name: 'Test Station',
   kind: 'station',
-  location: { latitude: 35.0, longitude: 139.0 },
+  location: { latitude: 37.75, longitude: -122.42 },
 };
 
 /** Deterministic walk-only world: 6 km/h, free. 0.009° lat ≈ 1.0 km. */
@@ -22,18 +22,19 @@ const walkOnly = (from: LatLng, to: LatLng) => {
   return [{ mode: 'walk' as const, durationMin: Math.ceil(km * 10), costUsd: 0, distanceKm: km }];
 };
 
-function makePlace(id: string, latOffset: number, overrides: Partial<Place> = {}): Place {
+function makePlace(id: string, latOffset: number, overrides: Partial<CuratedPlace> = {}): CuratedPlace {
   return {
     id,
     name: id,
-    location: { latitude: 35.0 + latOffset, longitude: 139.0 },
-    categories: ['food'],
+    location: { latitude: 37.75 + latOffset, longitude: -122.42 },
+    district: 'Mission',
+    themes: ['food'],
     priceLevel: 0,
+    priceBand: 'free',
     avgCostUsd: 0,
+    worthDetour: false,
     openHours: null,
     visitDurationMin: 60,
-    rating: 4.2,
-    reviewCount: 100,
     ...overrides,
   };
 }
@@ -50,7 +51,7 @@ function baseInput(overrides: Partial<OptimizeInput> = {}): OptimizeInput {
   };
 }
 
-const byId = (id: string): Place => {
+const byId = (id: string): CuratedPlace => {
   const p = bayAreaPlaces.find((x) => x.id === id);
   if (!p) throw new Error(`missing fixture place ${id}`);
   return p;
@@ -164,9 +165,16 @@ describe('tour ordering (NN + 2-opt)', () => {
 // ——— Transport choice —————————————————————————————————————————————
 
 describe('per-leg transport choice', () => {
+  /**
+   * A pair of points `km` apart on a north line, both inside San Francisco.
+   * The base latitude is 37.72 rather than something more central so that
+   * even the 10 km case stays south of 37.83 — past that the mock transport
+   * model treats the leg as a Marin crossing, which removes BART and turns a
+   * test about mode choice into a test about the Bay being in the way.
+   */
   const near = (km: number): [LatLng, LatLng] => [
-    { latitude: 35.0, longitude: 139.0 },
-    { latitude: 35.0 + km / 111.19, longitude: 139.0 },
+    { latitude: 37.72, longitude: -122.42 },
+    { latitude: 37.72 + km / 111.19, longitude: -122.42 },
   ];
 
   it('balanced walks short legs and rails long ones', () => {

@@ -1,7 +1,8 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import type { Place } from '../domain/types';
+import type { CuratedPlace } from '../domain/types';
+import { formatPriceBand } from '../lib/format';
 import { formatTime } from '../lib/geo';
 import { categoryLabels, colors } from '../theme/colors';
 import { IconTile } from './IconTile';
@@ -9,10 +10,8 @@ import { IconTile } from './IconTile';
 export const CARD_HEIGHT = 76;
 export const CARD_GAP = 9;
 
-const PRICE = ['Free', '$', '$$', '$$$', '$$$$'];
-
 /** "Open now" logic incl. past-midnight closers (close > 24:00). */
-function openStatus(p: Place): { open: boolean; text: string } {
+function openStatus(p: CuratedPlace): { open: boolean; text: string } {
   if (!p.openHours) return { open: true, text: '' };
   const now = new Date();
   const nowMin = now.getHours() * 60 + now.getMinutes();
@@ -25,13 +24,9 @@ function openStatus(p: Place): { open: boolean; text: string } {
     : { open: false, text: `Opens ${formatTime(open)}` };
 }
 
-function formatCount(n: number): string {
-  return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
-}
-
 /**
- * Place card per ui-guide §5: tinted icon tile · name / meta (amber rating,
- * count, category, price) / status · right distance + select control.
+ * Place card per ui-guide §5: tinted icon tile · name / meta (theme, price
+ * band) / status · right distance + select control.
  * Selected = positive border on the selected well.
  */
 export function PlaceCard({
@@ -42,7 +37,7 @@ export function PlaceCard({
   onPress,
   onToggle,
 }: {
-  place: Place;
+  place: CuratedPlace;
   selected: boolean;
   highlighted?: boolean;
   distanceKm: number | null;
@@ -59,29 +54,24 @@ export function PlaceCard({
         highlighted && !selected && styles.cardHighlighted,
       ]}
     >
-      <IconTile categories={place.categories} />
+      <IconTile categories={place.themes} />
       <View style={styles.cardBody}>
         <Text style={styles.cardName} numberOfLines={1}>
           {place.name}
         </Text>
         <Text style={styles.cardMeta} numberOfLines={1}>
-          {/* Ratings render only when a provider actually supplied them. */}
-          {place.rating != null && (
-            <>
-              <Text style={styles.cardRating}>★ {place.rating.toFixed(1)}</Text>
-              {place.reviewCount != null && (
-                <Text> ({formatCount(place.reviewCount)})</Text>
-              )}
-              <Text> · </Text>
-            </>
-          )}
+          {/*
+            No rating here, by design. Google ratings are live-only under PRD
+            §12.2 and a list view is the one place they may never be fetched.
+            The card says what the place is and what it costs — both ours.
+          */}
           <Text>
-            {place.categories
+            {place.themes
               .slice(0, 2)
               .map((c) => categoryLabels[c])
               .join(' · ')}
           </Text>
-          <Text> · {PRICE[place.priceLevel]}</Text>
+          <Text> · {formatPriceBand(place.priceBand)}</Text>
         </Text>
         <Text style={styles.cardStatus} numberOfLines={1}>
           {status.open ? (
@@ -137,7 +127,6 @@ const styles = StyleSheet.create({
   cardBody: { flex: 1 },
   cardName: { fontSize: 14, fontWeight: '500', color: colors.textPrimary },
   cardMeta: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
-  cardRating: { color: '#E8A22F' },
   cardStatus: { fontSize: 11, marginTop: 2 },
   cardOpen: { color: colors.positive, fontSize: 11, fontWeight: '500' },
   cardStatusMuted: { color: colors.textMuted, fontSize: 11 },

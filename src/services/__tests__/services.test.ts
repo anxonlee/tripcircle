@@ -105,7 +105,7 @@ describe('places service (mock)', () => {
       expect(p.location.longitude).toBeGreaterThan(-122.7);
       // East edge of the harvest bbox reaches the Berkeley/Oakland hills.
       expect(p.location.longitude).toBeLessThan(-122.0);
-      expect(p.categories.length).toBeGreaterThanOrEqual(1);
+      expect(p.themes.length).toBeGreaterThanOrEqual(1);
       expect(p.visitDurationMin).toBeGreaterThan(0);
       if (p.openHours) expect(p.openHours.close).toBeGreaterThan(p.openHours.open);
     }

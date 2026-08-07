@@ -1,7 +1,7 @@
 import type {
   LatLng,
   LegEstimate,
-  Place,
+  CuratedPlace,
   StartPlace,
   TransportMode,
 } from '../../domain/types';
@@ -58,7 +58,7 @@ export function withAvailableModes(
 
 export interface OptimizeInput {
   startPlace: StartPlace;
-  places: Place[];
+  places: CuratedPlace[];
   /** Departure from the anchor, minutes since midnight. */
   dayStartMin: number;
   /** Target return time ("home by"). */
@@ -68,7 +68,7 @@ export interface OptimizeInput {
 }
 
 export interface PlannedStop {
-  place: Place;
+  place: CuratedPlace;
   /** Leg that brings you to this stop. */
   leg: LegEstimate;
   /** Route order, 1-based. */
@@ -137,7 +137,7 @@ type Weights = number[][]; // [i][j], node 0 = anchor, nodes 1..n = places
 
 function buildWeights(
   anchor: LatLng,
-  places: Place[],
+  places: CuratedPlace[],
   goal: Goal,
   legOptions: LegOptionsFn
 ): Weights {
@@ -234,7 +234,7 @@ interface Schedule {
  */
 function schedule(
   input: OptimizeInput,
-  order: Place[],
+  order: CuratedPlace[],
   modeOverrides: Map<number, TransportMode>
 ): Schedule {
   const { startPlace, dayStartMin, goal, legOptions } = input;
@@ -303,10 +303,10 @@ function schedule(
  */
 function repairClosingViolations(
   input: OptimizeInput,
-  order: Place[],
+  order: CuratedPlace[],
   w: Weights,
-  indexOf: Map<Place, number>
-): Place[] {
+  indexOf: Map<CuratedPlace, number>
+): CuratedPlace[] {
   let current = [...order];
   for (let pass = 0; pass < current.length; pass++) {
     const sched = schedule(input, current, new Map());

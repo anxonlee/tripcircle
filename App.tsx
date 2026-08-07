@@ -6,40 +6,31 @@ import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { TabBar } from './src/components/TabBar';
 import type { RootStackParamList, TabParamList } from './src/navigation';
-import { AiPlanScreen } from './src/screens/AiPlanScreen';
-import { CostSplitScreen } from './src/screens/CostSplitScreen';
-import { DiscoverScreen } from './src/screens/DiscoverScreen';
-import { PassportScreen } from './src/screens/PassportScreen';
 import { PlacesScreen } from './src/screens/PlacesScreen';
 import { PlanScreen } from './src/screens/PlanScreen';
-import { PostDetailScreen } from './src/screens/PostDetailScreen';
-import { ProfileScreen } from './src/screens/ProfileScreen';
-import { PublishScreen } from './src/screens/PublishScreen';
-import { SettingsScreen } from './src/screens/SettingsScreen';
 import { SetupScreen } from './src/screens/SetupScreen';
-import { ShareChooserScreen } from './src/screens/ShareChooserScreen';
-import { TripDetailScreen } from './src/screens/TripDetailScreen';
-import { TripsScreen } from './src/screens/TripsScreen';
-import { UserProfileScreen } from './src/screens/UserProfileScreen';
-import { WishlistScreen } from './src/screens/WishlistScreen';
 import { useTripStore } from './src/store/useTripStore';
 import { colors } from './src/theme/colors';
 
+/**
+ * INTERIM SHELL — mid-port.
+ *
+ * The Phase 2–4 tabs (Discover, Trips, Profile) moved to `src/_legacy` when
+ * the MVP was resequenced around the place diary, and the Phase 1 tabs that
+ * replace them — Memories, Explore, Plan, Settings — are still being ported.
+ * Until they land this is a plain stack over the three screens that exist, so
+ * the app runs and the type-check stays honest. `src/navigation.ts` already
+ * declares the target routes.
+ */
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<TabParamList>();
 
+/** One tab for now; the custom five-slot bar returns with the other three. */
 function Tabs() {
   return (
-    <Tab.Navigator
-      tabBar={(props) => <TabBar {...props} />}
-      screenOptions={{ headerShown: false }}
-    >
-      <Tab.Screen name="Discover" component={DiscoverScreen} />
+    <Tab.Navigator screenOptions={{ headerShown: false }}>
       <Tab.Screen name="Explore" component={PlacesScreen} />
-      <Tab.Screen name="Trips" component={TripsScreen} />
-      <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
   );
 }
@@ -77,17 +68,7 @@ export default function App() {
           >
             <Stack.Screen name="Tabs" component={Tabs} />
             <Stack.Screen name="Setup" component={SetupScreen} />
-            <Stack.Screen name="Plan" component={PlanScreen} />
-            <Stack.Screen name="Wishlist" component={WishlistScreen} />
-            <Stack.Screen name="PostDetail" component={PostDetailScreen} />
-            <Stack.Screen name="TripDetail" component={TripDetailScreen} />
-            <Stack.Screen name="CostSplit" component={CostSplitScreen} />
-            <Stack.Screen name="Passport" component={PassportScreen} />
-            <Stack.Screen name="AiPlan" component={AiPlanScreen} />
-            <Stack.Screen name="Publish" component={PublishScreen} />
-            <Stack.Screen name="UserProfile" component={UserProfileScreen} />
-            <Stack.Screen name="ShareChooser" component={ShareChooserScreen} />
-            <Stack.Screen name="Settings" component={SettingsScreen} />
+            <Stack.Screen name="DayPlan" component={PlanScreen} />
           </Stack.Navigator>
         </NavigationContainer>
       </SafeAreaProvider>
