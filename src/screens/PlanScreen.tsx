@@ -533,8 +533,6 @@ export function PlanScreen({ navigation }: Props) {
                 key={o.goal}
                 icon={o.icon}
                 label={o.label}
-                total={formatDayTotal(plans[o.goal].totals.totalUsd)}
-                duration={formatDuration(plans[o.goal].totals.travelMin)}
                 active={goal === o.goal}
                 onPress={() => selectGoal(o.goal)}
               />
@@ -732,9 +730,18 @@ export function PlanScreen({ navigation }: Props) {
 }
 
 /**
- * One segment of the objective bar. Carries its own day total and travel
- * time so the four are comparable without switching between them
- * (ui-guide §5: never show an optimised result without its numbers).
+ * One segment of the objective bar: an icon and what the objective is called.
+ *
+ * The segment used to carry its own day total and travel time, so the four
+ * were comparable without switching between them. They are gone because four
+ * columns of two stacked figures, at 10pt in a quarter of a phone's width,
+ * read as a wall of small numbers rather than as a comparison — and on a
+ * compact walkable day all four are identical, so it was the same two figures
+ * four times over. The numbers for the objective actually selected sit
+ * directly underneath in the summary cells, at a size someone can read.
+ *
+ * ui-guide §5 is still met: the optimised result is never shown without its
+ * numbers. What is lost is the side-by-side, which now costs a tap.
  *
  * No clay here. The accent belongs to the screen's primary action, and a
  * selected segment is a state, not an action (ui-guide §1.3).
@@ -742,15 +749,11 @@ export function PlanScreen({ navigation }: Props) {
 function ObjectiveSeg({
   icon,
   label,
-  total,
-  duration,
   active,
   onPress,
 }: {
   icon: 'piggy-bank-outline' | 'scale-balance' | 'lightning-bolt' | 'seat-passenger';
   label: string;
-  total: string;
-  duration: string;
   active: boolean;
   onPress: () => void;
 }) {
@@ -759,7 +762,7 @@ function ObjectiveSeg({
       onPress={onPress}
       accessibilityRole="button"
       accessibilityState={{ selected: active }}
-      accessibilityLabel={`${label}, ${total}, ${duration} travelling`}
+      accessibilityLabel={label}
       style={[styles.objectiveSeg, active && styles.objectiveSegActive]}
     >
       <MaterialCommunityIcons
@@ -778,15 +781,6 @@ function ObjectiveSeg({
         numberOfLines={2}
       >
         {label}
-      </Text>
-      <Text
-        style={[styles.objectiveMeta, active && styles.objectiveMetaActive]}
-        numberOfLines={1}
-      >
-        {total}
-      </Text>
-      <Text style={styles.objectiveMeta} numberOfLines={1}>
-        {duration}
       </Text>
     </Pressable>
   );
@@ -919,8 +913,6 @@ const styles = StyleSheet.create({
     lineHeight: 14,
   },
   objectiveLabelActive: { color: colors.textPrimary },
-  objectiveMeta: { fontSize: 10, color: colors.textMuted, textAlign: 'center' },
-  objectiveMetaActive: { color: colors.textSecondary },
   actionRow: { flexDirection: 'row', gap: 8 },
   startBtn: {
     flex: 1,
