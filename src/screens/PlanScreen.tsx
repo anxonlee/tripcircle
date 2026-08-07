@@ -17,7 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CategoryPin, PIN_ANCHOR, PinSlot, StartPin } from '../components/CategoryPin';
 import { DayOrderEditor } from '../components/DayOrderEditor';
 import { DayWindowControl } from '../components/DayWindowControl';
-import { transportIcon, transportLabel } from '../components/icons';
+import { categoryIcon, transportIcon, transportLabel } from '../components/icons';
 import { TimelineNode } from '../components/IconTile';
 import type { CuratedPlace, TransportMode } from '../domain/types';
 import { formatDayEnd, formatTime } from '../lib/geo';
@@ -40,11 +40,13 @@ import {
   type Goal,
   type LegOptionsFn,
 } from '../lib/optimizer';
+import { suggestGapFillers } from '../lib/planner';
 import type { RootStackParamList } from '../navigation';
 import { placesService } from '../services/places';
 import { routingService } from '../services/routing';
+import { useDiaryStore } from '../store/useDiaryStore';
 import { useTripStore, useUiStore } from '../store/useTripStore';
-import { colors } from '../theme/colors';
+import { categoryColors, colors, tint } from '../theme/colors';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'DayPlan'>;
 
@@ -90,25 +92,21 @@ export function PlanScreen({ navigation }: Props) {
   const clearDayOrder = useTripStore((s) => s.clearDayOrder);
   const highlightedId = useUiStore((s) => s.highlightedPlaceId);
   const setHighlighted = useUiStore((s) => s.setHighlighted);
+  const dismissed = useUiStore((s) => s.dismissedPlaceIds);
+  const dismissSuggestion = useUiStore((s) => s.dismissSuggestion);
+  const visits = useDiaryStore((s) => s.visits);
   const { width } = useWindowDimensions();
 
+  const [allPlaces, setAllPlaces] = useState<CuratedPlace[]>([]);
   const [selectedPlaces, setSelectedPlaces] = useState<CuratedPlace[]>([]);
   const [legOptionsFn, setLegOptionsFn] = useState<LegOptionsFn | null>(null);
   const mapRef = useRef<MapView>(null);
   const pagerRef = useRef<ScrollView>(null);
   const [editing, setEditing] = useState(false);
 
-  /**
-   * The day in the order the user arranged, if they arranged one (F6).
-   *
-   * Reconciled rather than replaced: a stored order that no longer matches
-   * the selection keeps the places it still knows, in their places, and puts
-   * anything new at the end. Adding a place should not discard an
-   * arrangement made by hand.
-   */
-
   useEffect(() => {
     placesService.listPlaces().then((all) => {
+      setAllPlaces(all);
       const byId = new Map(all.map((p) => [p.id, p]));
       setSelectedPlaces(
         selectedIds.map((id) => byId.get(id)).filter((p): p is CuratedPlace => !!p)
@@ -118,9 +116,12 @@ export function PlanScreen({ navigation }: Props) {
   }, [selectedIds]);
 
   /**
-   * Every objective is solved here, once, and cached until the selection
-   * changes. Four solves of a typical day cost single-digit milliseconds
-   * together, so paying for all of them up front buys instant switching.
+   * The day in the order the user arranged, if they arranged one (F6).
+   *
+   * Reconciled rather than replaced: a stored order that no longer matches
+   * the selection keeps the places it still knows, in their places, and puts
+   * anything new at the end. Adding a place from the gap strip should not
+   * discard an arrangement made by hand.
    */
   const orderedPlaces = useMemo(() => {
     if (!dayOrder) return selectedPlaces;
@@ -132,6 +133,11 @@ export function PlanScreen({ navigation }: Props) {
     return [...known, ...added];
   }, [selectedPlaces, dayOrder]);
 
+  /**
+   * Every objective is solved here, once, and cached until the selection
+   * changes. Four solves of a typical day cost single-digit milliseconds
+   * together, so paying for all of them up front buys instant switching.
+   */
   const plans = useMemo<Record<Goal, DayPlan> | null>(() => {
     if (!startPlace || !legOptionsFn || orderedPlaces.length === 0) return null;
     const base = {
@@ -262,6 +268,27 @@ export function PlanScreen({ navigation }: Props) {
       { text: 'Open', onPress: () => Linking.openURL(url) },
     ]);
   }, [startPlace, plan]);
+
+  /**
+   * What could fill the day's empty stretch (§3.3.0).
+   *
+   * Ungated on diary history, unlike suggestions into an empty Plan tab: the
+   * gap's hours and the corridor between two chosen places do the
+   * constraining that a diary would otherwise have to. Dismissed places are
+   * removed from the input rather than the output, so the next candidate
+   * steps up and the strip keeps its length.
+   */
+  const gapFillers = useMemo(() => {
+    if (!plan?.gap || !startPlace) return [];
+    return suggestGapFillers(
+      allPlaces.filter(
+        (p) => !selectedIds.includes(p.id) && !dismissed.includes(p.id)
+      ),
+      visits,
+      startPlace,
+      plan.gap
+    );
+  }, [plan?.gap, startPlace, selectedIds, dismissed, visits, allPlaces]);
 
   const snapPoints = useMemo(() => ['35%', '60%', '90%'], []);
 
@@ -619,6 +646,85 @@ export function PlanScreen({ navigation }: Props) {
               ))}
             </ScrollView>
           )}
+
+          {/*
+            Offered, never added (§3.3.0). It sits below the timeline, outside
+            the pager, because the gap comes from opening hours rather than
+            from the objective — the same hole whichever route wins — and
+            repeating it four times would say so four times.
+          */}
+          {!editing && gapFillers.length > 0 && plan.gap && (
+            <View style={styles.suggestBlock}>
+              <View style={styles.suggestHead}>
+                <MaterialCommunityIcons
+                  name="star-four-points"
+                  size={14}
+                  color={colors.accent}
+                />
+                <Text style={styles.suggestTitle}>Suggested</Text>
+                <Text style={styles.suggestSub}>
+                  {formatDuration(plan.gap.toMin - plan.gap.fromMin)} free from{' '}
+                  {formatTime(plan.gap.fromMin)}
+                </Text>
+              </View>
+              <Text style={styles.suggestWhy}>
+                Add one and the day can start earlier instead of waiting.
+              </Text>
+              {gapFillers.map((s) => {
+                const primary = s.place.themes[0];
+                return (
+                  <View key={s.place.id} style={styles.suggestRow}>
+                    <View
+                      style={[
+                        styles.suggestIcon,
+                        { backgroundColor: tint(categoryColors[primary]) },
+                      ]}
+                    >
+                      <MaterialCommunityIcons
+                        name={categoryIcon[primary]}
+                        size={16}
+                        color={categoryColors[primary]}
+                      />
+                    </View>
+                    <View style={styles.suggestBody}>
+                      <Text style={styles.suggestName}>{s.place.name}</Text>
+                      <Text style={styles.suggestMeta}>
+                        {s.place.district} · {s.place.visitDurationMin} min ·{' '}
+                        {formatPriceBand(s.place.priceBand)}
+                      </Text>
+                      {s.reasons.length > 0 && (
+                        <Text style={styles.suggestReason}>
+                          {s.reasons.join(' · ')}
+                        </Text>
+                      )}
+                    </View>
+                    <Pressable
+                      onPress={() => dismissSuggestion(s.place.id)}
+                      hitSlop={10}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Not ${s.place.name}`}
+                      style={styles.suggestDismiss}
+                    >
+                      <MaterialCommunityIcons
+                        name="close"
+                        size={14}
+                        color={colors.textMuted}
+                      />
+                    </Pressable>
+                    <Pressable
+                      onPress={() => togglePlace(s.place.id)}
+                      hitSlop={10}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Add ${s.place.name} to the day`}
+                      style={styles.suggestAdd}
+                    >
+                      <MaterialCommunityIcons name="plus" size={16} color="#FFFFFF" />
+                    </Pressable>
+                  </View>
+                );
+              })}
+            </View>
+          )}
         </BottomSheetScrollView>
       </BottomSheet>
     </View>
@@ -838,6 +944,45 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceAlt,
   },
   mapsBtnText: { fontSize: 14, fontWeight: '500', color: colors.textPrimary },
+  suggestBlock: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: colors.surfaceAlt,
+    gap: 10,
+  },
+  suggestHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  suggestTitle: { fontSize: 13, fontWeight: '500', color: colors.textPrimary },
+  suggestSub: { fontSize: 11, color: colors.textMuted, flex: 1, textAlign: 'right' },
+  suggestWhy: { fontSize: 11, color: colors.textSecondary, lineHeight: 16, marginTop: -4 },
+  suggestRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  suggestIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  suggestBody: { flex: 1, gap: 1 },
+  suggestName: { fontSize: 13, fontWeight: '500', color: colors.textPrimary },
+  suggestMeta: { fontSize: 11, color: colors.textSecondary },
+  suggestReason: { fontSize: 10, color: colors.textMuted },
+  suggestDismiss: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  suggestAdd: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.accent,
+  },
   cellsRow: { flexDirection: 'row', gap: 8 },
   cell: {
     flex: 1,

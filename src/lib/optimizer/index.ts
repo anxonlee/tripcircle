@@ -105,6 +105,28 @@ export interface PlannedStop {
   warnings: string[];
 }
 
+/**
+ * A stretch of the day with nothing in it, measured against the day as the
+ * user asked for it rather than the one they were given.
+ *
+ * The distinction is the whole point. A morning place and a night place leave
+ * hours between them, and the departure stage answers that by setting out in
+ * the afternoon — correct, and it makes the gap vanish from the plan on
+ * screen. The gap is still the interesting fact about the day: it is the
+ * reason the morning place is no longer in the morning, and it is space the
+ * user could fill rather than skip.
+ *
+ * `from`/`to` bound the free time; the locations either side are where the
+ * day is when it opens and where it has to be after, which is what makes a
+ * filler near the route different from one merely near the anchor.
+ */
+export interface DayGap {
+  fromMin: number;
+  toMin: number;
+  fromLocation: LatLng;
+  toLocation: LatLng;
+}
+
 export interface DayPlan {
   goal: Goal;
   startPlace: StartPlace;
@@ -114,6 +136,8 @@ export interface DayPlan {
   returnLeg: LegEstimate | null;
   /** Arrival back at the anchor. */
   homeMin: number;
+  /** Largest idle stretch in the day as requested, if worth filling. */
+  gap: DayGap | null;
   totals: {
     travelMin: number;
     waitMin: number;
@@ -632,6 +656,41 @@ function wontFitIds(
   return ids;
 }
 
+/**
+ * Idle time worth offering to fill. Below this a gap is a coffee and a walk,
+ * not a hole in the day — and nothing in the dataset is a short enough visit
+ * to slot into it once travel either side is paid for.
+ */
+const FILLABLE_GAP_MIN = 90;
+
+/**
+ * The largest stretch of the day with nothing in it.
+ *
+ * Idle time is exactly `waitMin`: the schedule already separates travelling
+ * from standing about, so a gap is not inferred from the clock but read off
+ * the stop that is waiting. The window runs from wherever the day was — the
+ * anchor before the first stop, the previous stop after that — to when the
+ * waiting stop finally begins.
+ */
+function largestGap(input: OptimizeInput, sched: Schedule): DayGap | null {
+  let best: DayGap | null = null;
+  let bestIdle = FILLABLE_GAP_MIN;
+
+  sched.stops.forEach((stop, i) => {
+    if (stop.waitMin <= bestIdle) return;
+    const prev = i === 0 ? null : sched.stops[i - 1];
+    bestIdle = stop.waitMin;
+    best = {
+      fromMin: prev ? prev.departMin : input.dayStartMin,
+      toMin: stop.beginMin,
+      fromLocation: prev ? prev.place.location : input.startPlace.location,
+      toLocation: stop.place.location,
+    };
+  });
+
+  return best;
+}
+
 // ——— Cost reporting ————————————————————————————————————————————————
 
 function travelUsd(s: Schedule): number {
@@ -678,6 +737,7 @@ export function optimizeDay(rawInput: OptimizeInput): DayPlan {
       stops: [],
       returnLeg: null,
       homeMin: input.dayStartMin,
+      gap: null,
       totals: { travelMin: 0, waitMin: 0, travelUsd: 0, totalUsd: 0 },
       warnings: [],
     };
@@ -835,6 +895,10 @@ export function optimizeDay(rawInput: OptimizeInput): DayPlan {
     goal,
     startPlace,
     dayStartMin,
+    // Read off the requested day, not the one the departure stage produced.
+    // Setting out later is how the gap is *avoided*; it is still the thing
+    // the user might rather fill.
+    gap: largestGap(input, requested),
     stops: sched.stops,
     returnLeg: sched.returnLeg,
     homeMin: sched.homeMin,

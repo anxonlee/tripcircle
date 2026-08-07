@@ -12,6 +12,7 @@ import {
   SUGGESTION_HISTORY_THRESHOLD,
   deriveStopCount,
   explainedFirst,
+  suggestGapFillers,
   EXPLAINED_BONUS,
   suppressCommonReasons,
   distinctPlacesVisited,
@@ -19,7 +20,7 @@ import {
   rankPlaces,
   suggestDay,
 } from '../planner';
-import { formatDayEnd, formatTime } from '../geo';
+import { formatDayEnd, formatTime, haversineKm } from '../geo';
 import { findOverdue, startOfWeek, summarizeWeek } from '../summary';
 import { fitTransform, layoutWall, CARD_W } from '../wallLayout';
 import { buildWallCards } from '../../domain/diary';
@@ -1001,5 +1002,80 @@ describe('wall layout', () => {
       ])
     );
     expect(layout.clusters[0].width).toBeGreaterThanOrEqual(CARD_W * 2);
+  });
+});
+
+// ——— Gap fillers ——————————————————————————————————————————————————
+
+describe('filling the gap in a day', () => {
+  const place = (id: string) => bayAreaPlaces.find((p) => p.id === id)!;
+  /** Morning bakery to evening bar — the day the strip exists for. */
+  const bakery = place('golden-gate-bakery');
+  const bar = place('zeitgeist');
+  const gap = {
+    fromMin: 9 * 60 + 25,
+    toMin: 17 * 60,
+    fromLocation: bakery.location,
+    toLocation: bar.location,
+  };
+  const pool = bayAreaPlaces.filter((p) => p !== bakery && p !== bar);
+
+  /**
+   * The gate on the empty Plan tab needs four distinct places stamped. This
+   * one deliberately does not: the hours and the corridor do the
+   * constraining a diary would otherwise have to, and a first-time user with
+   * seven empty hours is who it helps most.
+   */
+  it('suggests without any diary at all', () => {
+    const fillers = suggestGapFillers(pool, [], powell, gap, NOW);
+    expect(fillers.length).toBeGreaterThan(0);
+  });
+
+  it('offers only places open through the gap', () => {
+    for (const f of suggestGapFillers(pool, [], powell, gap, NOW)) {
+      if (!f.place.openHours) continue;
+      expect(f.place.openHours.open).toBeLessThan(gap.toMin);
+      expect(f.place.openHours.close).toBeGreaterThan(gap.fromMin);
+    }
+  });
+
+  it('offers only visits that fit the time free', () => {
+    for (const f of suggestGapFillers(pool, [], powell, gap, NOW)) {
+      expect(f.place.visitDurationMin).toBeLessThanOrEqual(gap.toMin - gap.fromMin);
+    }
+  });
+
+  it('offers nothing for a gap too short to spend', () => {
+    const brief = { ...gap, toMin: gap.fromMin + 20 };
+    expect(suggestGapFillers(pool, [], powell, brief, NOW)).toEqual([]);
+  });
+
+  it('never offers a place already in the day', () => {
+    const fillers = suggestGapFillers(pool, [], powell, gap, NOW);
+    expect(fillers.map((f) => f.place.id)).not.toContain(bakery.id);
+    expect(fillers.map((f) => f.place.id)).not.toContain(bar.id);
+  });
+
+  /**
+   * A detour, not a radius. Somewhere back past the anchor is nearer the
+   * start place than the corridor and is still the wrong answer.
+   */
+  it('keeps to the corridor between the two ends', () => {
+    const fillers = suggestGapFillers(pool, [], powell, gap, NOW);
+    const direct = haversineKm(gap.fromLocation, gap.toLocation);
+    for (const f of fillers) {
+      const detour =
+        haversineKm(gap.fromLocation, f.place.location) +
+        haversineKm(f.place.location, gap.toLocation) -
+        direct;
+      expect(detour).toBeLessThanOrEqual(1.2);
+    }
+  });
+
+  it('reads the diary when there is one, without needing it', () => {
+    const loved = place('union-square');
+    const visits = [visit('union-square', 90), visit('union-square', 120)];
+    const withDiary = suggestGapFillers(pool, visits, powell, gap, NOW);
+    expect(withDiary.map((f) => f.place.id)).toContain(loved.id);
   });
 });

@@ -696,3 +696,92 @@ export function dropUniversalReasons(shown: Suggestion[]): Suggestion[] {
     return { ...s, reasonDetail, reasons: reasonDetail.map((r) => r.text) };
   });
 }
+
+/**
+ * How far off the line between the two ends of a gap a filler may sit.
+ *
+ * A detour, not a radius: the cost of a candidate is the extra ground walked
+ * to include it, which is what a person actually pays. Judging by distance
+ * from the anchor instead — the test `rankPlaces` already applies — would
+ * happily offer somewhere back past the start place while the day waits half
+ * a mile away. That distinction matters more here than in a compact city:
+ * `MAX_ANCHOR_KM` is 6km, which from a central anchor spans most of San
+ * Francisco, so the anchor test alone constrains almost nothing.
+ *
+ * Checked rather than inherited. On a Coit Tower to Zeitgeist corridor —
+ * 3.9km apart, five hours free — 1.2km admits 25 of the 80 candidates open
+ * in the window, and the ones it leads with sit on the line rather than near
+ * it: Union Square at 0.11km of detour, Asian Art Museum at 0.00.
+ */
+const MAX_GAP_DETOUR_KM = 1.2;
+
+/**
+ * Minutes of the gap left unspent after a candidate's visit, below which it
+ * does not fit. Covers getting there and getting on, at the sizing speed.
+ */
+const GAP_TRAVEL_ALLOWANCE_MIN = 20;
+
+/** The free stretch a filler has to fit inside. */
+export interface GapWindow {
+  fromMin: number;
+  toMin: number;
+  fromLocation: { latitude: number; longitude: number };
+  toLocation: { latitude: number; longitude: number };
+}
+
+/**
+ * What could fill an empty stretch of a planned day (PRD §3.3.0).
+ *
+ * **This is an offer, never a substitution.** Nothing here enters the plan
+ * until the user taps it — §3.3.0 permits the planner to offer an
+ * alternative as "a distinct, dismissible element" and forbids it becoming
+ * the default plan, and the caller is what has to honour that.
+ *
+ * It is deliberately not gated on diary history, where suggestions into an
+ * empty Plan tab are (§3.3.0.1). That gate exists because a suggestion drawn
+ * from nothing is arbitrary. This one is not drawn from nothing: the time
+ * window and the corridor between two chosen places do the constraining that
+ * a diary would otherwise have to. A first-time user with a bakery, a bar and
+ * seven hours between them is the person this helps most, and answering them
+ * with "stamp four places first" would be the empty state at its worst.
+ *
+ * The diary still improves the answer wherever it exists — `rankPlaces` reads
+ * would-go-again, frequency, recency and district affinity as usual. It is no
+ * longer required for the answer to be meaningful.
+ */
+export function suggestGapFillers(
+  places: CuratedPlace[],
+  visits: Visit[],
+  startPlace: StartPlace,
+  gap: GapWindow,
+  now: number = Date.now(),
+  limit: number = 3
+): Suggestion[] {
+  const minutes = gap.toMin - gap.fromMin;
+  if (minutes <= 0) return [];
+
+  const directKm = haversineKm(gap.fromLocation, gap.toLocation);
+  const detourKm = (p: CuratedPlace) =>
+    haversineKm(gap.fromLocation, p.location) +
+    haversineKm(p.location, gap.toLocation) -
+    directKm;
+
+  // The gap is the window, so `rankPlaces` scores open-hours fit against the
+  // free stretch rather than the whole day, and drops anything shut for all
+  // of it.
+  const ranked = rankPlaces(places, visits, startPlace, now, 'familiar', {
+    dayStartMin: gap.fromMin,
+    homeByMin: gap.toMin,
+  }).filter(
+    (s) =>
+      s.place.visitDurationMin + GAP_TRAVEL_ALLOWANCE_MIN <= minutes &&
+      detourKm(s.place) <= MAX_GAP_DETOUR_KM
+  );
+
+  // Same reason discipline as anywhere else. Most of these will end up with
+  // no reason line at all, which is correct: "it fits your gap" is true of
+  // every card here, so the strip's own heading says it once instead.
+  return dropUniversalReasons(
+    suppressCommonReasons(ranked).slice(0, Math.max(0, limit))
+  );
+}
