@@ -73,6 +73,22 @@ export interface OptimizeInput {
   homeByMin: number;
   goal: Goal;
   legOptions: LegOptionsFn;
+  /**
+   * Take `places` in the order given and keep it (PRD F6, §3.4).
+   *
+   * Set once the user has arranged the day themselves. Construction, 2-opt
+   * and the repair passes are skipped — every one of them exists to choose an
+   * order, and choosing one is exactly what the user has just done. §3.4 asks
+   * for the optimiser to become "an on-demand assist rather than
+   * all-or-nothing", and this is that switch.
+   *
+   * Scheduling, transport choice and the departure still run: the user
+   * arranged the stops, not the buses. Warnings still fire, and matter more
+   * here than anywhere else — with the repairs off, a stop that arrives after
+   * closing stays where it was put, so saying so is the only thing standing
+   * between the user and a locked door.
+   */
+  fixedOrder?: boolean;
 }
 
 export interface PlannedStop {
@@ -531,6 +547,9 @@ function latestSafeStart(
    */
   const planAt = (dayStartMin: number): Schedule => {
     const at = { ...input, dayStartMin };
+    // A fixed order stays fixed at every candidate time, or the search would
+    // be scoring days the user is never going to be shown.
+    if (input.fixedOrder) return schedule(at, [...input.places], new Map());
     let order = twoOpt(nearestNeighborTour(w), w).map((i) => input.places[i - 1]);
     order = repairClosingViolations(at, order, w, indexOf);
     order = repairLongWaits(at, order, w, indexOf);
@@ -664,17 +683,20 @@ export function optimizeDay(rawInput: OptimizeInput): DayPlan {
     };
   }
 
-  // 1. Order
+  // 1. Order — unless the user has already chosen one.
   const w = buildWeights(startPlace.location, places, goal, legOptions);
-  const nnTour = nearestNeighborTour(w);
-  const optTour = twoOpt(nnTour, w);
-  let order = optTour.map((i) => places[i - 1]);
-
-  // 2. Open-hours repair, in both directions: too late to get in, and too
-  //    early to be let in.
   const indexOf = new Map(places.map((p, i) => [p, i + 1] as const));
-  order = repairClosingViolations(input, order, w, indexOf);
-  order = repairLongWaits(input, order, w, indexOf);
+  let order: CuratedPlace[];
+  if (input.fixedOrder) {
+    order = [...places];
+  } else {
+    order = twoOpt(nearestNeighborTour(w), w).map((i) => places[i - 1]);
+
+    // 2. Open-hours repair, in both directions: too late to get in, and too
+    //    early to be let in.
+    order = repairClosingViolations(input, order, w, indexOf);
+    order = repairLongWaits(input, order, w, indexOf);
+  }
 
   // 3. Schedule. Every leg's mode was already chosen by the goal, so there is
   //    nothing left to repair on cost — only to report.

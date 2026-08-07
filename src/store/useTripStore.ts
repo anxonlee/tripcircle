@@ -74,6 +74,23 @@ interface TripState {
    */
   startDayStep: number;
   setStartDayStep: (step: number) => void;
+  /**
+   * The order the user arranged, by place id (PRD F6, §3.4).
+   *
+   * `null` means they have not arranged one and the optimiser is free to
+   * sequence the day. Once set, it is authority: the optimiser schedules and
+   * chooses transport but no longer reorders. §3.4 calls this the optimiser
+   * becoming "an on-demand assist rather than all-or-nothing", and clearing
+   * it is how the assist is asked for again.
+   *
+   * Deliberately not cleared when the selection changes. Adding a place
+   * should not throw away an arrangement the user made by hand — the screen
+   * reconciles instead, keeping known ids in their order and putting anything
+   * new at the end.
+   */
+  dayOrder: string[] | null;
+  setDayOrder: (ids: string[]) => void;
+  clearDayOrder: () => void;
 }
 
 export const useTripStore = create<TripState>()(
@@ -104,6 +121,9 @@ export const useTripStore = create<TripState>()(
       setSuggestionBias: (b) => set({ suggestionBias: b }),
       startDayStep: 0,
       setStartDayStep: (step) => set({ startDayStep: Math.max(0, step) }),
+      dayOrder: null,
+      setDayOrder: (ids) => set({ dayOrder: ids }),
+      clearDayOrder: () => set({ dayOrder: null }),
     }),
     {
       name: 'tripcircle-trip',
@@ -118,6 +138,7 @@ export const useTripStore = create<TripState>()(
         hasCar: s.hasCar,
         suggestionBias: s.suggestionBias,
         startDayStep: s.startDayStep,
+        dayOrder: s.dayOrder,
       }),
     }
   )

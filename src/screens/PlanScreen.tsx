@@ -15,6 +15,7 @@ import {
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CategoryPin, PIN_ANCHOR, PinSlot, StartPin } from '../components/CategoryPin';
+import { DayOrderEditor } from '../components/DayOrderEditor';
 import { DayWindowControl } from '../components/DayWindowControl';
 import { transportIcon, transportLabel } from '../components/icons';
 import { TimelineNode } from '../components/IconTile';
@@ -84,6 +85,9 @@ export function PlanScreen({ navigation }: Props) {
   const dayStartMin = useTripStore((s) => s.dayStartMin);
   const homeByMin = useTripStore((s) => s.homeByMin);
   const setDayWindow = useTripStore((s) => s.setDayWindow);
+  const dayOrder = useTripStore((s) => s.dayOrder);
+  const setDayOrder = useTripStore((s) => s.setDayOrder);
+  const clearDayOrder = useTripStore((s) => s.clearDayOrder);
   const highlightedId = useUiStore((s) => s.highlightedPlaceId);
   const setHighlighted = useUiStore((s) => s.setHighlighted);
   const { width } = useWindowDimensions();
@@ -92,6 +96,16 @@ export function PlanScreen({ navigation }: Props) {
   const [legOptionsFn, setLegOptionsFn] = useState<LegOptionsFn | null>(null);
   const mapRef = useRef<MapView>(null);
   const pagerRef = useRef<ScrollView>(null);
+  const [editing, setEditing] = useState(false);
+
+  /**
+   * The day in the order the user arranged, if they arranged one (F6).
+   *
+   * Reconciled rather than replaced: a stored order that no longer matches
+   * the selection keeps the places it still knows, in their places, and puts
+   * anything new at the end. Adding a place should not discard an
+   * arrangement made by hand.
+   */
 
   useEffect(() => {
     placesService.listPlaces().then((all) => {
@@ -108,14 +122,27 @@ export function PlanScreen({ navigation }: Props) {
    * changes. Four solves of a typical day cost single-digit milliseconds
    * together, so paying for all of them up front buys instant switching.
    */
+  const orderedPlaces = useMemo(() => {
+    if (!dayOrder) return selectedPlaces;
+    const byId = new Map(selectedPlaces.map((p) => [p.id, p]));
+    const known = dayOrder
+      .map((id) => byId.get(id))
+      .filter((p): p is CuratedPlace => p !== undefined);
+    const added = selectedPlaces.filter((p) => !dayOrder.includes(p.id));
+    return [...known, ...added];
+  }, [selectedPlaces, dayOrder]);
+
   const plans = useMemo<Record<Goal, DayPlan> | null>(() => {
-    if (!startPlace || !legOptionsFn || selectedPlaces.length === 0) return null;
+    if (!startPlace || !legOptionsFn || orderedPlaces.length === 0) return null;
     const base = {
       startPlace,
-      places: selectedPlaces,
+      places: orderedPlaces,
       dayStartMin,
       homeByMin,
       legOptions: legOptionsFn,
+      // The four objectives still differ with a fixed order — they choose
+      // transport per leg, not just the sequence.
+      fixedOrder: dayOrder !== null,
     };
     return {
       economic: optimizeDay({ ...base, goal: 'economic' }),
@@ -123,7 +150,7 @@ export function PlanScreen({ navigation }: Props) {
       fastest: optimizeDay({ ...base, goal: 'fastest' }),
       leastWalking: optimizeDay({ ...base, goal: 'leastWalking' }),
     };
-  }, [startPlace, selectedPlaces, legOptionsFn, dayStartMin, homeByMin]);
+  }, [startPlace, orderedPlaces, legOptionsFn, dayStartMin, homeByMin, dayOrder]);
 
   const plan = plans?.[goal] ?? null;
   const goalIndex = OBJECTIVES.findIndex((o) => o.goal === goal);
@@ -262,6 +289,9 @@ export function PlanScreen({ navigation }: Props) {
                 200
               );
             }}
+            // The gesture people already know from rearranging apps.
+            onLongPress={() => setEditing(true)}
+            delayLongPress={400}
             style={[
               styles.timelineRow,
               highlightedId === s.place.id && styles.stopHighlighted,
@@ -448,6 +478,10 @@ export function PlanScreen({ navigation }: Props) {
         // Bounding the travel is the fix rather than padding the header,
         // which would leave a white gap at every other snap point.
         topInset={insets.top}
+        // While arranging, the sheet stops listening for pans. A drag that
+        // the sheet also claims is a drag that moves the sheet instead of
+        // the stop.
+        enableContentPanningGesture={!editing}
         backgroundStyle={styles.sheet}
         handleIndicatorStyle={styles.handle}
       >
@@ -520,30 +554,71 @@ export function PlanScreen({ navigation }: Props) {
               />
               <Text style={styles.mapsBtnText}>Maps</Text>
             </Pressable>
+            {/*
+              Long-pressing a stop also opens this, the way rearranging apps
+              does. The button exists because a gesture nobody is told about
+              is a gesture nobody finds (F6).
+            */}
+            <Pressable
+              style={styles.mapsBtn}
+              onPress={() => setEditing(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Arrange the order of the day"
+            >
+              <MaterialCommunityIcons
+                name="sort"
+                size={16}
+                color={dayOrder ? colors.accent : colors.textPrimary}
+              />
+              <Text
+                style={[styles.mapsBtnText, dayOrder && { color: colors.accent }]}
+              >
+                Order
+              </Text>
+            </Pressable>
           </View>
         </View>
 
         <BottomSheetScrollView
           contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
         >
-          {/* Horizontal pager: one page per objective, all rendered from the
-              cache. Swiping settles on a page and reports back to the bar. */}
-          <ScrollView
-            ref={pagerRef}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            contentOffset={{ x: goalIndex * width, y: 0 }}
-            onMomentumScrollEnd={(e) =>
-              onPagerSettled(e.nativeEvent.contentOffset.x)
-            }
-          >
-            {OBJECTIVES.map((o) => (
-              <View key={o.goal} style={{ width }}>
-                {renderTimeline(plans[o.goal])}
-              </View>
-            ))}
-          </ScrollView>
+          {/*
+            Edit mode replaces the timeline rather than overlaying it, which
+            is what keeps the gestures from competing: while the editor is up
+            the pager is locked and there is only one recogniser listening
+            for a drag.
+          */}
+          {editing ? (
+            <DayOrderEditor
+              places={orderedPlaces}
+              onReorder={setDayOrder}
+              onDone={() => setEditing(false)}
+              onOptimise={() => {
+                clearDayOrder();
+                setEditing(false);
+              }}
+            />
+          ) : (
+            /* Horizontal pager: one page per objective, all rendered from the
+               cache. Swiping settles on a page and reports back to the bar. */
+            <ScrollView
+              ref={pagerRef}
+              horizontal
+              pagingEnabled
+              scrollEnabled={!editing}
+              showsHorizontalScrollIndicator={false}
+              contentOffset={{ x: goalIndex * width, y: 0 }}
+              onMomentumScrollEnd={(e) =>
+                onPagerSettled(e.nativeEvent.contentOffset.x)
+              }
+            >
+              {OBJECTIVES.map((o) => (
+                <View key={o.goal} style={{ width }}>
+                  {renderTimeline(plans[o.goal])}
+                </View>
+              ))}
+            </ScrollView>
+          )}
         </BottomSheetScrollView>
       </BottomSheet>
     </View>

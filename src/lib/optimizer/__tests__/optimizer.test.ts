@@ -675,6 +675,90 @@ describe('scale', () => {
   });
 });
 
+// ——— A day the user arranged ——————————————————————————————————————
+
+describe('fixed order', () => {
+  /** Deliberately the worst order the optimiser could be handed. */
+  const backwards = () => [
+    makePlace('far', 0.03),
+    makePlace('near', 0.004),
+    makePlace('middle', 0.014),
+  ];
+
+  it('keeps the order it was given', () => {
+    const plan = optimizeDay(
+      baseInput({ places: backwards(), fixedOrder: true, homeByMin: 23 * 60 })
+    );
+    expect(plan.stops.map((s) => s.place.id)).toEqual(['far', 'near', 'middle']);
+  });
+
+  it('would have reordered that day if left to itself', () => {
+    // Proves the previous test is testing something.
+    const plan = optimizeDay(baseInput({ places: backwards(), homeByMin: 23 * 60 }));
+    expect(plan.stops.map((s) => s.place.id)).not.toEqual(['far', 'near', 'middle']);
+  });
+
+  it('still schedules, still chooses transport, still comes home', () => {
+    const plan = optimizeDay(
+      baseInput({ places: backwards(), fixedOrder: true, homeByMin: 23 * 60 })
+    );
+    expect(plan.stops).toHaveLength(3);
+    expect(plan.returnLeg).not.toBeNull();
+    expect(plan.homeMin).toBeGreaterThan(plan.dayStartMin);
+    for (const s of plan.stops) expect(s.leg.mode).toBeDefined();
+  });
+
+  /**
+   * The repairs are off, so nothing rescues a stop the user put after its own
+   * closing time. Saying so is the only thing between them and a locked door.
+   */
+  it('warns rather than silently fixing an order that breaks opening hours', () => {
+    const shutsEarly = makePlace('shuts-early', 0.004, {
+      openHours: { open: 8 * 60, close: 10 * 60 },
+    });
+    const long = makePlace('long-visit', 0.008, { visitDurationMin: 180 });
+    const plan = optimizeDay(
+      baseInput({
+        places: [long, shutsEarly],
+        fixedOrder: true,
+        homeByMin: 23 * 60,
+      })
+    );
+    expect(plan.stops.map((s) => s.place.id)).toEqual(['long-visit', 'shuts-early']);
+    expect(plan.warnings.join(' ')).toMatch(/after .*closes|won't fit/);
+  });
+
+  it('still leaves later when an early start would only mean waiting', () => {
+    // The departure is not the order. Arranging the stops says nothing about
+    // what time to set out.
+    const plan = optimizeDay(
+      baseInput({
+        places: [
+          makePlace('cafe', 0.012, { openHours: { open: 7 * 60, close: 21 * 60 } }),
+          makePlace('night-bar', 0.004, {
+            openHours: { open: 17 * 60, close: 26 * 60 },
+          }),
+        ],
+        fixedOrder: true,
+        homeByMin: 23 * 60 + 59,
+      })
+    );
+    expect(plan.dayStartMin).toBeGreaterThan(9 * 60);
+    expect(plan.stops.map((s) => s.place.id)).toEqual(['cafe', 'night-bar']);
+  });
+
+  it('leaves the day alone when no order was arranged', () => {
+    const places = backwards();
+    const free = optimizeDay(baseInput({ places, homeByMin: 23 * 60 }));
+    const alsoFree = optimizeDay(
+      baseInput({ places, fixedOrder: false, homeByMin: 23 * 60 })
+    );
+    expect(alsoFree.stops.map((s) => s.place.id)).toEqual(
+      free.stops.map((s) => s.place.id)
+    );
+  });
+});
+
 // ——— Car availability ——————————————————————————————————————————————
 
 describe('car availability', () => {
