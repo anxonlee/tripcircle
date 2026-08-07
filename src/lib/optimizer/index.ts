@@ -516,7 +516,7 @@ function latestSafeStart(
   w: Weights,
   indexOf: Map<CuratedPlace, number>,
   current: Schedule
-): { dayStartMin: number; savedWaitMin: number } | null {
+): { dayStartMin: number; savedWaitMin: number; schedule: Schedule } | null {
   const waitOf = (s: Schedule) =>
     s.stops.reduce((sum, st) => sum + st.waitMin, 0);
   const currentWait = waitOf(current);
@@ -571,7 +571,46 @@ function latestSafeStart(
   if (!safe(best)) return null;
 
   const saved = currentWait - waitOf(best);
-  return saved > 0 ? { dayStartMin: rounded, savedWaitMin: saved } : null;
+  // The schedule travels back with the time. The caller adopts this plan
+  // rather than re-deriving it, so what the user is shown is the very
+  // schedule the choice was tested against.
+  return saved > 0
+    ? { dayStartMin: rounded, savedWaitMin: saved, schedule: best }
+    : null;
+}
+
+/**
+ * Places that cannot be visited in the day at all: shut for its whole span,
+ * or reached after they close.
+ *
+ * Counted as distinct places rather than as summed problems. Somewhere shut
+ * before the day even starts is both unfittable and a closing violation, and
+ * is one problem — counting it twice would overstate how broken the day is.
+ *
+ * Shared by the gate on moving the departure and by the warning that reports
+ * the count, so the two can never disagree about what fits.
+ */
+function wontFitIds(
+  places: CuratedPlace[],
+  sched: Schedule,
+  dayStartMin: number,
+  homeByMin: number
+): Set<string> {
+  const ids = new Set<string>();
+  for (const p of places) {
+    if (
+      p.openHours &&
+      (p.openHours.open >= homeByMin || p.openHours.close <= dayStartMin)
+    ) {
+      ids.add(p.id);
+    }
+  }
+  for (const s of sched.stops) {
+    if (s.place.openHours && s.beginMin >= s.place.openHours.close) {
+      ids.add(s.place.id);
+    }
+  }
+  return ids;
 }
 
 // ——— Cost reporting ————————————————————————————————————————————————
@@ -639,7 +678,33 @@ export function optimizeDay(rawInput: OptimizeInput): DayPlan {
 
   // 3. Schedule. Every leg's mode was already chosen by the goal, so there is
   //    nothing left to repair on cost — only to report.
-  const sched = schedule(input, order, new Map());
+  const requested = schedule(input, order, new Map());
+
+  /**
+   * 4. Choose when to leave.
+   *
+   * `dayStartMin` is the earliest the user will set out, not an instruction
+   * to set out then. Reading it as an instruction is what puts a bakery and a
+   * bar in the same day and sends the user to the bar hours before it opens,
+   * to stand outside — while the finish is pinned by the bar's opening and is
+   * the same whether they left at 09:00 or at 15:00. The only thing an early
+   * start buys in that day is waiting.
+   *
+   * The move is only ever later, only when total waiting strictly falls, and
+   * never when the finish slips or a stop stops fitting — `latestSafeStart`
+   * enforces all three — so it cannot turn a good day into a worse one.
+   *
+   * Gated on the day being otherwise sound, and measured against the
+   * requested start: if something cannot fit at all, no departure rescues it,
+   * and shifting the day would only bury the real problem.
+   */
+  const soundAsRequested =
+    wontFitIds(places, requested, input.dayStartMin, input.homeByMin).size === 0;
+  const later = soundAsRequested
+    ? latestSafeStart(input, w, indexOf, requested)
+    : null;
+  const sched = later ? later.schedule : requested;
+  const dayStartMin = later ? later.dayStartMin : input.dayStartMin;
 
   const tUsd = travelUsd(sched);
   // Transport only. What a place costs is `avgCostUsd`, an estimate on an
@@ -675,8 +740,7 @@ export function optimizeDay(rawInput: OptimizeInput): DayPlan {
   const unfittable = places.filter(
     (p) =>
       p.openHours &&
-      (p.openHours.open >= input.homeByMin ||
-        p.openHours.close <= input.dayStartMin)
+      (p.openHours.open >= input.homeByMin || p.openHours.close <= dayStartMin)
   );
   for (const p of unfittable) {
     warnings.push(
@@ -713,12 +777,7 @@ export function optimizeDay(rawInput: OptimizeInput): DayPlan {
 
   // Distinct places, not summed counts: somewhere shut before the day even
   // starts is both unfittable and a closing violation, and is one problem.
-  const wontFit = new Set(unfittable.map((p) => p.id));
-  for (const s of sched.stops) {
-    if (s.place.openHours && s.beginMin >= s.place.openHours.close) {
-      wontFit.add(s.place.id);
-    }
-  }
+  const wontFit = wontFitIds(places, sched, dayStartMin, input.homeByMin);
   if (wontFit.size > 0) {
     const n = wontFit.size;
     warnings.push(
@@ -726,20 +785,34 @@ export function optimizeDay(rawInput: OptimizeInput): DayPlan {
     );
   }
 
-  // Only when the day is otherwise sound. If something cannot fit at all, a
-  // later start does not rescue it and saying so alongside the real problem
-  // reads as two competing pieces of advice.
-  const laterStart = wontFit.size > 0 ? null : latestSafeStart(input, w, indexOf, sched);
-  if (laterStart) {
+  /**
+   * Say why the day does not begin when the user asked.
+   *
+   * A plan that quietly departs hours after the time on the control reads as
+   * a bug, however much better it is. The place that pinned the start is
+   * named because after the shift its wait is gone, and with it the per-stop
+   * warning that would otherwise have explained the delay — leaving the user
+   * with a changed number and no reason for it.
+   *
+   * The binding place is the one that was waited on longest at the requested
+   * start, which is the one whose opening the departure is answering.
+   */
+  if (later) {
+    const pinned = requested.stops.reduce((a, b) =>
+      b.waitMin > a.waitMin ? b : a
+    );
+    const opensAt = pinned.place.openHours
+      ? ` ${pinned.place.name} opens at ${formatTime(pinned.place.openHours.open)}, so leaving earlier only adds waiting.`
+      : '';
     warnings.push(
-      `Leaving at ${formatTime(laterStart.dayStartMin)} instead would cut ${laterStart.savedWaitMin} min of waiting, with the same places and the same finish`
+      `Leaving at ${formatTime(dayStartMin)} rather than ${formatTime(input.dayStartMin)}, which saves ${later.savedWaitMin} min of waiting for the same places and the same finish.${opensAt}`
     );
   }
 
   return {
     goal,
     startPlace,
-    dayStartMin: input.dayStartMin,
+    dayStartMin,
     stops: sched.stops,
     returnLeg: sched.returnLeg,
     homeMin: sched.homeMin,

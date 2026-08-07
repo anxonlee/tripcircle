@@ -363,43 +363,81 @@ describe('open hours', () => {
     expect(plan.warnings.join(' ')).not.toContain("won't fit");
   });
 
-  it('suggests a later start when the day opens with a long wait', () => {
-    const bar = makePlace('night-bar', 0.004, {
+  /** A late opener and an all-day place — the day the departure has to solve. */
+  const lateNightDay = () => [
+    makePlace('night-bar', 0.004, {
       openHours: { open: 17 * 60, close: 26 * 60 },
-    });
-    const cafe = makePlace('cafe', 0.012, {
+    }),
+    makePlace('cafe', 0.012, {
       openHours: { open: 7 * 60, close: 21 * 60 },
-    });
+    }),
+  ];
+
+  it('leaves later rather than standing about, and says why', () => {
+    // `dayStartMin` is the earliest the user will set out, not an instruction
+    // to set out then. Read as an instruction it sent them to a bar hours
+    // before it opened, to wait outside.
     const plan = optimizeDay(
-      baseInput({ places: [bar, cafe], homeByMin: 23 * 60 + 59 })
+      baseInput({ places: lateNightDay(), homeByMin: 23 * 60 + 59 })
     );
-    expect(plan.totals.waitMin).toBeGreaterThan(60);
-    expect(plan.warnings.join(' ')).toMatch(/Leaving at .* instead would cut/);
+    expect(plan.dayStartMin).toBeGreaterThan(9 * 60);
+    expect(plan.totals.waitMin).toBeLessThan(30);
+    // A changed departure with no reason given reads as a bug.
+    expect(plan.warnings.join(' ')).toMatch(/Leaving at .* rather than 9:00/);
+    expect(plan.warnings.join(' ')).toContain('night-bar opens at 17:00');
   });
 
-  it('keeps the promise it makes about that later start', () => {
-    // The test that matters. An earlier version checked candidates by
+  it('buys the later departure for nothing — the finish does not move', () => {
+    // The whole justification. If leaving later cost a later finish it would
+    // be a trade; it does not, because the late opener pins the end of the
+    // day whatever time you set out.
+    const from9 = optimizeDay(
+      baseInput({ places: lateNightDay(), homeByMin: 23 * 60 + 59 })
+    );
+    const from12 = optimizeDay(
+      baseInput({
+        places: lateNightDay(),
+        dayStartMin: 12 * 60,
+        homeByMin: 23 * 60 + 59,
+      })
+    );
+    expect(from9.homeMin).toBe(from12.homeMin);
+    expect(from9.stops).toHaveLength(from12.stops.length);
+  });
+
+  it('is a fixed point: re-planning at the departure it chose changes nothing', () => {
+    // The defect this guards. An earlier version scored candidate starts by
     // rescheduling the *existing* order, but a different start can produce a
-    // different tour — so the plan a user actually got by following the
-    // advice finished 24 minutes later than promised. Re-plan at the
-    // suggested time and hold it to its word.
-    const bar = makePlace('night-bar', 0.004, {
-      openHours: { open: 17 * 60, close: 26 * 60 },
+    // different tour — so the plan a user got by following the advice
+    // finished 24 minutes later than it promised. Now the schedule returned
+    // is the one the choice was tested against, so asking again at that
+    // departure must give back the identical day.
+    const input = baseInput({
+      places: lateNightDay(),
+      homeByMin: 23 * 60 + 59,
     });
-    const cafe = makePlace('cafe', 0.012, {
-      openHours: { open: 7 * 60, close: 21 * 60 },
-    });
-    const input = baseInput({ places: [bar, cafe], homeByMin: 23 * 60 + 59 });
     const plan = optimizeDay(input);
+    const again = optimizeDay({ ...input, dayStartMin: plan.dayStartMin });
 
-    const advice = plan.warnings.find((w) => w.startsWith('Leaving at '))!;
-    const [, hh, mm] = advice.match(/Leaving at (\d+):(\d+)/)!;
-    const suggested = Number(hh) * 60 + Number(mm);
+    expect(again.dayStartMin).toBe(plan.dayStartMin);
+    expect(again.homeMin).toBe(plan.homeMin);
+    expect(again.totals.waitMin).toBe(plan.totals.waitMin);
+    expect(again.stops.map((s) => s.place.id)).toEqual(
+      plan.stops.map((s) => s.place.id)
+    );
+  });
 
-    const after = optimizeDay({ ...input, dayStartMin: suggested });
-    expect(after.homeMin).toBeLessThanOrEqual(plan.homeMin);
-    expect(after.totals.waitMin).toBeLessThan(plan.totals.waitMin);
-    expect(after.stops).toHaveLength(plan.stops.length);
+  it('never leaves before the user is willing to', () => {
+    // The window is bounds, not a suggestion. The departure may slide later
+    // inside it and must never slide out of it.
+    const plan = optimizeDay(
+      baseInput({
+        places: lateNightDay(),
+        dayStartMin: 18 * 60,
+        homeByMin: 23 * 60 + 59,
+      })
+    );
+    expect(plan.dayStartMin).toBeGreaterThanOrEqual(18 * 60);
   });
 
   it('says nothing about starting later when there is no waiting', () => {

@@ -85,12 +85,13 @@ export function DayWindowControl({
           <Pressable style={styles.card} onPress={() => {}}>
             <Text style={styles.title}>Your day</Text>
             <Text style={styles.sub}>
-              The plan is rebuilt as you change this. Nothing is lost by trying
-              a shorter day.
+              The earliest you will set out and the time you want to be back.
+              The plan may leave later than this if setting out early would
+              only mean waiting. Nothing is lost by trying a shorter day.
             </Text>
 
             <Row
-              label="Leave"
+              label="Not before"
               value={window.dayStartMin}
               onLess={() => nudge('dayStartMin', -STEP_MIN)}
               onMore={() => nudge('dayStartMin', STEP_MIN)}
