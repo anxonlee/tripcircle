@@ -123,6 +123,13 @@ export interface CuratedPlace {
   /** OpenStreetMap object this record came from, e.g. "node/7025326100". */
   osmRef?: string;
   description?: string;
+  /**
+   * Insider note — which entrance, what to order. Curation, and absent from
+   * every seed record for the same reason `worthDetour` is false: an OSM
+   * import has none, and inventing them would be writing fiction into a
+   * dataset the header calls unverified.
+   */
+  tips?: string;
 }
 
 /**

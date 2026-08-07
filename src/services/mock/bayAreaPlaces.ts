@@ -6441,3 +6441,28 @@ export const bayAreaPlaces: CuratedPlace[] = [
     visitDurationMin: 90,
     osmRef: 'node/7906733781',
   },];
+
+/**
+ * The map region every screen opens at: the seed data's own bounding box,
+ * padded, rather than hand-tuned coordinates.
+ *
+ * Derived rather than written down so a place added outside the current
+ * bounds widens the frame instead of landing off-screen, and so there is one
+ * region to change if the launch city ever does. Note that this is the whole
+ * harvest area — Mountain View to Berkeley — which is a far wider frame than
+ * a day out ever uses; `MAX_ANCHOR_KM` is what keeps planning local.
+ */
+export const SEED_REGION = (() => {
+  const lats = bayAreaPlaces.map((p) => p.location.latitude);
+  const lons = bayAreaPlaces.map((p) => p.location.longitude);
+  const [minLat, maxLat] = [Math.min(...lats), Math.max(...lats)];
+  const [minLon, maxLon] = [Math.min(...lons), Math.max(...lons)];
+  // 40% breathing room so edge pins are not flush against the bezel.
+  const pad = 1.4;
+  return {
+    latitude: (minLat + maxLat) / 2,
+    longitude: (minLon + maxLon) / 2,
+    latitudeDelta: (maxLat - minLat) * pad,
+    longitudeDelta: (maxLon - minLon) * pad,
+  };
+})();

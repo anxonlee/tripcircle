@@ -3,6 +3,12 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import type { StartPlace } from '../domain/types';
 import type { Goal } from '../lib/optimizer';
+import {
+  LATEST_HOME_BY_MIN,
+  clampDayWindow,
+  type DayWindow,
+  type SuggestionBias,
+} from '../lib/planner';
 
 /**
  * Persisted planning state (local-only, AsyncStorage). The start place is
@@ -18,7 +24,18 @@ interface TripState {
   startPlaceEphemeral: boolean;
   selectedPlaceIds: string[];
   goal: Goal;
-  /** Day window (minutes since midnight). Cost is reported, never capped. */
+  /**
+   * Day window, minutes since midnight. There is deliberately no budget
+   * field: cost is reported by the planner, never enforced.
+   *
+   * The default runs as late as the clock allows rather than to an invented
+   * early finish. Opening hours are what should end a day, and the planner
+   * bounds the outing by §3.3's eight hours, so the late window costs nothing.
+   *
+   * `homeByMin` ends at 23:59 rather than midnight. It never crosses into the
+   * next day: see `LATEST_HOME_BY_MIN`, which explains why the last minute
+   * matters.
+   */
   dayStartMin: number;
   homeByMin: number;
   /**
@@ -35,6 +52,18 @@ interface TripState {
   setSelection: (ids: string[]) => void;
   clearSelection: () => void;
   setGoal: (g: Goal) => void;
+  /**
+   * Adjust the outing window. Always clamped, so no caller can persist a
+   * window that ends before it starts or runs past 23:59.
+   */
+  setDayWindow: (window: DayWindow) => void;
+  /**
+   * Whether suggestions lean towards places already in the diary or away from
+   * them. Defaults to `familiar`, which is what the ranking did before the
+   * choice existed, so an upgrade changes nothing until the user asks.
+   */
+  suggestionBias: SuggestionBias;
+  setSuggestionBias: (b: SuggestionBias) => void;
 }
 
 export const useTripStore = create<TripState>()(
@@ -45,7 +74,7 @@ export const useTripStore = create<TripState>()(
       selectedPlaceIds: [],
       goal: 'balanced',
       dayStartMin: 9 * 60,
-      homeByMin: 21 * 60,
+      homeByMin: LATEST_HOME_BY_MIN,
       hasCar: null,
       setHasCar: (v) => set({ hasCar: v }),
       setStartPlace: (sp, opts) =>
@@ -59,6 +88,9 @@ export const useTripStore = create<TripState>()(
       setSelection: (ids) => set({ selectedPlaceIds: ids }),
       clearSelection: () => set({ selectedPlaceIds: [] }),
       setGoal: (g) => set({ goal: g }),
+      setDayWindow: (window) => set(clampDayWindow(window)),
+      suggestionBias: 'familiar',
+      setSuggestionBias: (b) => set({ suggestionBias: b }),
     }),
     {
       name: 'tripcircle-trip',
@@ -71,6 +103,7 @@ export const useTripStore = create<TripState>()(
         dayStartMin: s.dayStartMin,
         homeByMin: s.homeByMin,
         hasCar: s.hasCar,
+        suggestionBias: s.suggestionBias,
       }),
     }
   )
@@ -80,9 +113,28 @@ export const useTripStore = create<TripState>()(
 interface UiState {
   highlightedPlaceId: string | null;
   setHighlighted: (id: string | null) => void;
+  /**
+   * Suggestions the user has waved away this session (PRD §3.3.0.1, FD7).
+   *
+   * Deliberately not persisted, and there is no undo. Dismissing means "not
+   * today", not "never again": the list dies with the session, which is what
+   * keeps it from quietly becoming a permanent blocklist nobody can see. That
+   * is also why nothing on screen offers to bring a dismissal back — the
+   * recovery is closing the app, and an undo affordance would earn its space
+   * only if the list outlived the session.
+   */
+  dismissedPlaceIds: string[];
+  dismissSuggestion: (id: string) => void;
 }
 
 export const useUiStore = create<UiState>()((set) => ({
   highlightedPlaceId: null,
   setHighlighted: (id) => set({ highlightedPlaceId: id }),
+  dismissedPlaceIds: [],
+  dismissSuggestion: (id) =>
+    set((s) =>
+      s.dismissedPlaceIds.includes(id)
+        ? s
+        : { dismissedPlaceIds: [...s.dismissedPlaceIds, id] }
+    ),
 }));

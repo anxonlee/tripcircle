@@ -5,8 +5,7 @@ import type {
   StartPlace,
   TransportMode,
 } from '../../domain/types';
-import { formatTime } from '../geo';
-import { formatUsd } from '../format';
+import { formatDayEnd, formatTime } from '../geo';
 
 /**
  * Day-plan optimizer. Pure TypeScript, no UI or provider imports — travel
@@ -21,14 +20,23 @@ import { formatUsd } from '../format';
  *  3. Schedule: walk the tour, choosing each leg's transport greedily by the
  *     goal; wait out not-yet-open places; collect warnings.
  *
- * Cost is REPORTED, NOT ENFORCED (PRD §3.3). An earlier revision had a fourth
- * stage that downgraded legs until a day fit a budget cap; it was removed
- * because transport is a small share of what a day costs once meals and
- * admissions are counted, so capping transport constrains the wrong number.
- * A user who wants a cheap day picks the Most Economic objective instead.
+ * Cost is reported, never enforced. There is no budget ceiling: transport is
+ * a small share of what a day out actually costs, so capping transport alone
+ * would police a number that excludes most of the user's spending. A cheap
+ * day is chosen through the `economic` goal, which makes every leg cheap by
+ * construction, rather than repaired after the fact.
  */
 
-export type Goal = 'balanced' | 'fastest';
+/**
+ * What the planner is optimising for.
+ *
+ * The first three sit on a single axis, the money a user will spend to save
+ * a minute, and differ only in where they sit on it. `leastWalking` is not on
+ * that axis: walking is free, so moving along the cost axis makes walking
+ * more attractive, not less. It needs its own penalty term — see
+ * `walkPenaltyMin`.
+ */
+export type Goal = 'economic' | 'balanced' | 'fastest' | 'leastWalking';
 
 export type LegOptionsFn = (from: LatLng, to: LatLng) => LegEstimate[];
 
@@ -95,27 +103,90 @@ export interface DayPlan {
     waitMin: number;
     travelUsd: number;
     /** Spend at places (entry fees, meals). */
-    spendUsd: number;
     totalUsd: number;
   };
   warnings: string[];
 }
 
-/** Balanced: $0.35 ≈ one minute of value. Fastest: cost is only a tie-breaker. */
+/**
+ * Dollars the user is assumed willing to spend to save one minute. Every cost
+ * in the model is `costUsd` and the display currency is the same, so nothing
+ * converts anywhere.
+ *
+ * Economic: $0.005/min, the deliberate inverse of Fastest. A dollar is worth
+ * 200 minutes, so price decides every leg and duration only separates options
+ * that already cost the same.
+ * Balanced: $0.50/min (~$30/hr). In the Bay this is the line that decides BART
+ * versus a rideshare — a car that saves 12 minutes over the rail leg is worth
+ * it, one that saves 5 is not.
+ * Fastest: absurdly high, so cost survives only as a tie-breaker.
+ * Least walking: $5/min, high enough that fare barely registers. This user is
+ * buying their way out of walking, so the mode choice must not be talked out
+ * of a paid ride by its price. The actual avoidance comes from the walk
+ * penalty below, not from this number.
+ */
 const COST_WEIGHT_USD_PER_MIN: Record<Goal, number> = {
-  balanced: 0.35,
-  fastest: 15,
+  economic: 0.005,
+  balanced: 0.5,
+  fastest: 200,
+  leastWalking: 5,
 };
 
 /**
- * Fastest still refuses pointless taxi hops: any option within this many
+ * Distance on foot a `leastWalking` plan will absorb without complaint. Short
+ * connections have no vehicle worth boarding, and a planner that called a
+ * rideshare to cross a plaza would be useless.
+ */
+const WALK_FREE_KM = 0.25;
+
+/**
+ * Minutes of penalty per kilometre walked beyond the free allowance, applied
+ * only under `leastWalking`.
+ *
+ * The form is linear past a threshold rather than a flat surcharge, because
+ * the goal is to prefer the *shorter* of two walks, not merely to avoid
+ * walking at all: a flat penalty would rank a 400 m walk and a 2 km walk
+ * identically. At 120 min/km a 400 m walk carries an 18-minute penalty, which
+ * comfortably loses to any vehicle, while a 200 m walk carries none.
+ */
+const WALK_PENALTY_MIN_PER_KM = 120;
+
+/**
+ * The `leastWalking` term. Zero for every other goal, and zero for every
+ * mode that is not walking, so the other three objectives score exactly as
+ * they did before.
+ */
+function walkPenaltyMin(leg: LegEstimate, goal: Goal): number {
+  if (goal !== 'leastWalking' || leg.mode !== 'walk') return 0;
+  return Math.max(0, leg.distanceKm - WALK_FREE_KM) * WALK_PENALTY_MIN_PER_KM;
+}
+
+/**
+ * Fastest still refuses pointless rideshare hops: any option within this many
  * minutes of the fastest option is considered "as fast", and the cheapest
  * such option wins (PRD §3.3: upgrade only where it saves meaningful time).
+ *
+ * Three, not the four the Hong Kong model used, for two measured reasons.
+ *
+ * Four landed exactly on a boundary in the Bay's fare table: rail trails a
+ * rideshare by 5 minutes at 1–3km, by 4 at 4–5km, and by 3 or less past 7km.
+ * At four the 4km case decided on an equality, so a one-minute change
+ * anywhere in the transport model would silently flip it.
+ *
+ * And a nominal four minutes is not four real minutes here. The model prices
+ * BART by ride time and knows nothing of headways, which run 8–15 minutes off
+ * peak — so a rail option that looks four minutes slower can easily be
+ * fifteen. Tightening the tolerance moves the marginal case to the car, which
+ * is the honest answer under a goal named Fastest.
  */
-const FASTEST_TOLERANCE_MIN = 4;
+const FASTEST_TOLERANCE_MIN = 3;
 
 function legScore(leg: LegEstimate, goal: Goal): number {
-  return leg.durationMin + leg.costUsd / COST_WEIGHT_USD_PER_MIN[goal];
+  return (
+    leg.durationMin +
+    leg.costUsd / COST_WEIGHT_USD_PER_MIN[goal] +
+    walkPenaltyMin(leg, goal)
+  );
 }
 
 /** Greedy per-leg transport choice under the goal. */
@@ -343,9 +414,168 @@ function repairClosingViolations(
   return current;
 }
 
-// ——— Totals ————————————————————————————————————————————————————————
+/**
+ * A wait longer than this is worth reordering the day to avoid.
+ *
+ * Half an hour is a coffee; four hours is the day being over before it
+ * starts. The threshold only decides when to *try* a move — a move is kept
+ * only if it actually reduces the total wait.
+ */
+const LONG_WAIT_MIN = 30;
 
-/** Travel spend across the tour, including the leg home. */
+/**
+ * If a stop is reached long before it opens, try moving it later.
+ *
+ * The mirror of `repairClosingViolations`, and it exists because that one
+ * only ever fired on arriving after somewhere had shut. Arriving before it
+ * opens was not a violation at all: the schedule simply waited, and nothing
+ * in the ordering knew. Measured on a five-place day, that put a bar opening
+ * at 17:00 first in a day starting at 09:00 and idled 467 minutes in front of
+ * it, where the same five places in a better order wait 320 and get home two
+ * and a half hours earlier.
+ *
+ * The tour weight cannot express this. It scores pairs of places by distance,
+ * fare and duration, and a wait is a property of *when you arrive*, which
+ * depends on everything before it. Rather than make the weight
+ * sequence-dependent — which would mean rebuilding nearest-neighbour and
+ * 2-opt around a scheduling pass — this repairs the finished tour the way the
+ * closing-time stage already does: bounded, greedy, and easy to follow.
+ *
+ * Total wait is the thing minimised, not the one long wait, so a move that
+ * merely pushes the idling onto a different stop is rejected.
+ */
+function repairLongWaits(
+  input: OptimizeInput,
+  order: CuratedPlace[],
+  w: Weights,
+  indexOf: Map<CuratedPlace, number>
+): CuratedPlace[] {
+  const waitOf = (s: Schedule) =>
+    s.stops.reduce((sum, st) => sum + st.waitMin, 0);
+
+  let current = [...order];
+  for (let pass = 0; pass < current.length; pass++) {
+    const sched = schedule(input, current, new Map());
+    const waiterPos = sched.stops.findIndex((s) => s.waitMin > LONG_WAIT_MIN);
+    if (waiterPos < 0) break;
+    if (waiterPos === current.length - 1) break; // already last; nowhere later
+
+    let best = current;
+    let bestWait = waitOf(sched);
+    let bestWeight = Infinity;
+    for (let pos = waiterPos + 1; pos < current.length; pos++) {
+      const candidate = [...current];
+      const [moved] = candidate.splice(waiterPos, 1);
+      candidate.splice(pos, 0, moved);
+      // Never trade a wait for somewhere shut on arrival: that is the defect
+      // the other repair exists to remove.
+      const candSched = schedule(input, candidate, new Map());
+      if (candSched.hardClosingViolations > sched.hardClosingViolations) continue;
+      const candWait = waitOf(candSched);
+      const candWeight = tourWeight(
+        candidate.map((p) => indexOf.get(p)!),
+        w
+      );
+      if (
+        candWait < bestWait ||
+        (candWait === bestWait && candWeight < bestWeight)
+      ) {
+        best = candidate;
+        bestWait = candWait;
+        bestWeight = candWeight;
+      }
+    }
+    if (best === current) break; // no improving move
+    current = best;
+  }
+  return current;
+}
+
+/**
+ * The latest the day could start without spoiling it.
+ *
+ * Waiting is dead time at the front of a day: arriving somewhere at 09:36 for
+ * a place that opens at 17:00 is not planning, it is queuing. The whole
+ * schedule can usually be pushed later to absorb that, and the point of
+ * saying so is that the user rarely realises the day they asked for is a
+ * shorter day starting later.
+ *
+ * Binary search rather than a scan, because every quantity involved moves one
+ * way as the start slides later: arrivals get later, so waits only shrink,
+ * closing violations only appear, and the finish only recedes. That
+ * monotonicity is what makes ten schedules enough to find the last start that
+ * is still safe.
+ *
+ * Safe means no closing violation the current plan does not already have, and
+ * home no later than the user's target. Returns null when nothing is to be
+ * gained, so the caller stays quiet rather than suggesting the start the user
+ * already chose.
+ */
+function latestSafeStart(
+  input: OptimizeInput,
+  w: Weights,
+  indexOf: Map<CuratedPlace, number>,
+  current: Schedule
+): { dayStartMin: number; savedWaitMin: number } | null {
+  const waitOf = (s: Schedule) =>
+    s.stops.reduce((sum, st) => sum + st.waitMin, 0);
+  const currentWait = waitOf(current);
+  if (currentWait === 0) return null;
+
+  /**
+   * Candidates go through the same ordering and repair stages the user would
+   * get, not merely a reschedule of today's order. A different start time can
+   * produce a different tour — with a 16:20 start the bar comes first and the
+   * bakery second — and a suggestion evaluated against the old order promised
+   * a finish the real plan does not keep.
+   */
+  const planAt = (dayStartMin: number): Schedule => {
+    const at = { ...input, dayStartMin };
+    let order = twoOpt(nearestNeighborTour(w), w).map((i) => input.places[i - 1]);
+    order = repairClosingViolations(at, order, w, indexOf);
+    order = repairLongWaits(at, order, w, indexOf);
+    return schedule(at, order, new Map());
+  };
+
+  /**
+   * The finish may not slip. That is the whole promise of the suggestion —
+   * the same places, home at the same time, minus the standing about — and it
+   * is also what stops the search wandering somewhere absurd. A 20:45 start
+   * satisfies "no closing violation" while pushing a bakery visit through its
+   * 21:00 close and the day out to 22:49; requiring the finish to hold rules
+   * that out without a separate test for it.
+   */
+  const safe = (s: Schedule) =>
+    s.hardClosingViolations <= current.hardClosingViolations &&
+    s.homeMin <= current.homeMin;
+
+  /**
+   * Binary search rather than a scan. Every quantity involved moves one way
+   * as the start slides later: arrivals get later, so waits only shrink,
+   * closing violations only appear, and the finish only recedes. That
+   * monotonicity is what makes a handful of trials enough to find the last
+   * start still worth having.
+   */
+  let lo = input.dayStartMin; // known safe: it is the current plan
+  let hi = input.homeByMin;
+  for (let i = 0; i < 10 && hi - lo > 5; i++) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (safe(planAt(mid))) lo = mid;
+    else hi = mid;
+  }
+
+  // Round down to a time a person would actually say out loud.
+  const rounded = Math.floor(lo / 5) * 5;
+  if (rounded <= input.dayStartMin) return null;
+  const best = planAt(rounded);
+  if (!safe(best)) return null;
+
+  const saved = currentWait - waitOf(best);
+  return saved > 0 ? { dayStartMin: rounded, savedWaitMin: saved } : null;
+}
+
+// ——— Cost reporting ————————————————————————————————————————————————
+
 function travelUsd(s: Schedule): number {
   return (
     s.stops.reduce((sum, st) => sum + st.leg.costUsd, 0) +
@@ -355,7 +585,31 @@ function travelUsd(s: Schedule): number {
 
 // ——— Entry point ——————————————————————————————————————————————————
 
-export function optimizeDay(input: OptimizeInput): DayPlan {
+export function optimizeDay(rawInput: OptimizeInput): DayPlan {
+  /**
+   * Every stage asks for the same legs over and over — the weight matrix
+   * fills n², and each repair pass reschedules the whole tour to score one
+   * move. `legOptions` is the documented hot path: every call classifies both
+   * endpoints against the Bay barrier and runs the crossing table.
+   *
+   * One memo, shared by every stage, for the life of a single solve. Legs
+   * depend only on the two points, so within one solve the answer cannot
+   * change; nothing is cached between solves, so live provider data would
+   * still be re-read each time a plan is built.
+   */
+  const legCache = new Map<string, LegEstimate[]>();
+  const input: OptimizeInput = {
+    ...rawInput,
+    legOptions: (from, to) => {
+      const key = `${from.latitude},${from.longitude}|${to.latitude},${to.longitude}`;
+      let hit = legCache.get(key);
+      if (!hit) {
+        hit = rawInput.legOptions(from, to);
+        legCache.set(key, hit);
+      }
+      return hit;
+    },
+  };
   const { startPlace, places, goal, legOptions } = input;
 
   if (places.length === 0) {
@@ -366,7 +620,7 @@ export function optimizeDay(input: OptimizeInput): DayPlan {
       stops: [],
       returnLeg: null,
       homeMin: input.dayStartMin,
-      totals: { travelMin: 0, waitMin: 0, travelUsd: 0, spendUsd: 0, totalUsd: 0 },
+      totals: { travelMin: 0, waitMin: 0, travelUsd: 0, totalUsd: 0 },
       warnings: [],
     };
   }
@@ -377,16 +631,26 @@ export function optimizeDay(input: OptimizeInput): DayPlan {
   const optTour = twoOpt(nnTour, w);
   let order = optTour.map((i) => places[i - 1]);
 
-  // 2. Open-hours repair
+  // 2. Open-hours repair, in both directions: too late to get in, and too
+  //    early to be let in.
   const indexOf = new Map(places.map((p, i) => [p, i + 1] as const));
   order = repairClosingViolations(input, order, w, indexOf);
+  order = repairLongWaits(input, order, w, indexOf);
 
-  // 3+4. Schedule with budget repair
-  const spendUsd = order.reduce((sum, p) => sum + p.avgCostUsd, 0);
+  // 3. Schedule. Every leg's mode was already chosen by the goal, so there is
+  //    nothing left to repair on cost — only to report.
   const sched = schedule(input, order, new Map());
 
   const tUsd = travelUsd(sched);
-  const totalUsd = tUsd + spendUsd;
+  // Transport only. What a place costs is `avgCostUsd`, an estimate on an
+  // unverified fixture, and adding it made the day total a figure whose
+  // larger part the model cannot stand behind. It also made the four
+  // objectives look alike: the same places are visited whichever route wins,
+  // so at-place spend is a constant, and adding a constant to four numbers
+  // only compresses the difference between them. Measured on an 11-place
+  // day, the spread across objectives went from 19% to fifteenfold once it
+  // came out. User-entered spend is Phase 2 (§3.4).
+  const totalUsd = tUsd;
   const travelMin =
     sched.stops.reduce((sum, s) => sum + s.leg.durationMin, 0) +
     (sched.returnLeg?.durationMin ?? 0);
@@ -395,7 +659,80 @@ export function optimizeDay(input: OptimizeInput): DayPlan {
   const warnings: string[] = sched.stops.flatMap((s) => s.warnings);
   if (sched.homeMin > input.homeByMin) {
     warnings.push(
-      `Home by ${formatTime(sched.homeMin)} — ${Math.round(sched.homeMin - input.homeByMin)} min past your ${formatTime(input.homeByMin)} target`
+      `Home by ${formatDayEnd(sched.homeMin)} — ${Math.round(sched.homeMin - input.homeByMin)} min past your ${formatTime(input.homeByMin)} target`
+    );
+  }
+
+  /**
+   * Say plainly when the day cannot work, rather than leaving it to be
+   * inferred from per-stop warnings (§3.3.0). The planner never trims a
+   * selection, so a set of places whose hours cannot share one day still
+   * gets scheduled — the honest output is the schedule plus a sentence
+   * naming the problem. Splitting across days is the real fix and is
+   * roadmap (multi-day trips, PRD §14 Phase 4), so the copy recommends
+   * without promising.
+   */
+  const unfittable = places.filter(
+    (p) =>
+      p.openHours &&
+      (p.openHours.open >= input.homeByMin ||
+        p.openHours.close <= input.dayStartMin)
+  );
+  for (const p of unfittable) {
+    warnings.push(
+      `${p.name} is closed for the whole of your day (open ${formatTime(p.openHours!.open)}–${formatTime(p.openHours!.close)})`
+    );
+  }
+
+  /**
+   * Name the window that would work, rather than leaving the user to find it
+   * by nudging the control. Two different fixes, and which one applies is not
+   * obvious from the outside: somewhere that opens after the day ends needs a
+   * later *finish*, where a long wait inside the day is cured by a later
+   * *start*. Suggesting the wrong one is worse than suggesting nothing.
+   */
+  const opensAfterDay = unfittable.filter(
+    (p) => p.openHours!.open >= input.homeByMin
+  );
+  if (opensAfterDay.length > 0) {
+    const latest = opensAfterDay.reduce((a, b) =>
+      b.openHours!.open + b.visitDurationMin > a.openHours!.open + a.visitDurationMin
+        ? b
+        : a
+    );
+    const needed = latest.openHours!.open + latest.visitDurationMin;
+    // A day ends at 23:59 at the latest — the same rule the day window
+    // enforces, restated rather than imported: the planner chooses places
+    // and this module schedules them, and the dependency runs one way.
+    if (needed <= 24 * 60 - 1) {
+      warnings.push(
+        `${latest.name} opens at ${formatTime(latest.openHours!.open)} — a day running to ${formatTime(needed)} would fit it in`
+      );
+    }
+  }
+
+  // Distinct places, not summed counts: somewhere shut before the day even
+  // starts is both unfittable and a closing violation, and is one problem.
+  const wontFit = new Set(unfittable.map((p) => p.id));
+  for (const s of sched.stops) {
+    if (s.place.openHours && s.beginMin >= s.place.openHours.close) {
+      wontFit.add(s.place.id);
+    }
+  }
+  if (wontFit.size > 0) {
+    const n = wontFit.size;
+    warnings.push(
+      `${n === 1 ? 'One of these places' : `${n} of these places`} won't fit this day. Try a wider day window, or save ${n === 1 ? 'it' : 'some'} for another day — planning a trip across several days is on the roadmap.`
+    );
+  }
+
+  // Only when the day is otherwise sound. If something cannot fit at all, a
+  // later start does not rescue it and saying so alongside the real problem
+  // reads as two competing pieces of advice.
+  const laterStart = wontFit.size > 0 ? null : latestSafeStart(input, w, indexOf, sched);
+  if (laterStart) {
+    warnings.push(
+      `Leaving at ${formatTime(laterStart.dayStartMin)} instead would cut ${laterStart.savedWaitMin} min of waiting, with the same places and the same finish`
     );
   }
 
@@ -406,7 +743,7 @@ export function optimizeDay(input: OptimizeInput): DayPlan {
     stops: sched.stops,
     returnLeg: sched.returnLeg,
     homeMin: sched.homeMin,
-    totals: { travelMin, waitMin, travelUsd: tUsd, spendUsd, totalUsd },
+    totals: { travelMin, waitMin, travelUsd: tUsd, totalUsd },
     warnings,
   };
 }
@@ -419,4 +756,7 @@ export const __internals = {
   nearestNeighborTour,
   twoOpt,
   tourWeight,
+  // Exposed so the wait-repair test can measure the unrepaired day itself
+  // rather than hard-coding a figure that silently rots.
+  schedule,
 };

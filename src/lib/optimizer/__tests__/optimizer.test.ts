@@ -6,6 +6,7 @@ import {
   __internals,
   optimizeDay,
   withAvailableModes,
+  type Goal,
   type OptimizeInput,
 } from '../index';
 
@@ -72,13 +73,33 @@ const sfSubset = [
   byId('smugglers-cove'),
 ];
 
-const sfInput = (goal: 'balanced' | 'fastest'): OptimizeInput =>
+const sfInput = (goal: Goal = 'balanced'): OptimizeInput =>
   baseInput({
     startPlace: powellAnchor,
     places: sfSubset,
     goal,
     legOptions: mockLegOptions,
   });
+
+/** Two points `km` apart on a north line from a base that stays inside SF. */
+const nearPair = (km: number): [LatLng, LatLng] => [
+  { latitude: 37.72, longitude: -122.42 },
+  { latitude: 37.72 + km / 111.19, longitude: -122.42 },
+];
+
+/**
+ * 2.5 km north of the anchor: measured as the band where Fastest genuinely
+ * buys a rideshare (11 min, $10.60) over walking (34 min, free), so Economic
+ * has an expensive choice to decline. Beyond about 4 km BART is quicker as
+ * well as cheaper and there is nothing left to refuse.
+ */
+const FASTEST_BUYS_A_CAR_OFFSET = 2.5 / 111.19;
+
+/**
+ * A gap the cheap objectives walk and `leastWalking` will not: measured at
+ * 800 m, where walking is 11 min and free, and a rideshare is 7 min for $7.
+ */
+const walkableGap = (): [LatLng, LatLng] => nearPair(0.8);
 
 // ——— Structure ————————————————————————————————————————————————————
 
@@ -253,6 +274,176 @@ describe('open hours', () => {
     expect(plan.stops[0].place.id).toBe('early-market');
     expect(plan.warnings.filter((w) => /after .*closes/.test(w))).toEqual([]);
   });
+
+  it('moves a late opener later instead of idling in front of it', () => {
+    // The bar sits nearest the anchor, so nearest-neighbour visits it first —
+    // at 09:00, eight hours before it opens. The repair must push it to the
+    // end of the day rather than let the schedule absorb the wait.
+    const bar = makePlace('night-bar', 0.004, {
+      openHours: { open: 17 * 60, close: 26 * 60 },
+    });
+    const daytime = [
+      makePlace('a', 0.012),
+      makePlace('b', 0.02),
+      makePlace('c', 0.028),
+    ];
+    const places = [bar, ...daytime];
+    const input = baseInput({
+      places,
+      homeByMin: 23 * 60 + 59,
+      legOptions: mockLegOptions,
+    });
+
+    // Measure the unrepaired day rather than hard-coding a figure: the tour
+    // the ordering stages hand over, scheduled as-is.
+    const { buildWeights, nearestNeighborTour, twoOpt, schedule } = __internals;
+    const w = buildWeights(anchor.location, places, 'balanced', mockLegOptions);
+    const tour = twoOpt(nearestNeighborTour(w), w).map((i) => places[i - 1]);
+    expect(tour[0].id).toBe('night-bar'); // the defect this repair exists for
+    const unrepaired = schedule(input, tour, new Map()).stops.reduce(
+      (sum: number, s: { waitMin: number }) => sum + s.waitMin,
+      0
+    );
+
+    const plan = optimizeDay(input);
+    expect(plan.stops[plan.stops.length - 1].place.id).toBe('night-bar');
+    expect(plan.totals.waitMin).toBeLessThan(unrepaired);
+  });
+
+  it('keeps the wait repair from creating a closing violation', () => {
+    // Moving the late opener past the early closer would rescue the wait but
+    // arrive after the market shuts. The repair must refuse that trade.
+    const bar = makePlace('night-bar', 0.004, {
+      openHours: { open: 12 * 60, close: 26 * 60 },
+      visitDurationMin: 300,
+    });
+    const earlyMarket = makePlace('early-market', 0.02, {
+      openHours: { open: 5 * 60, close: 12 * 60 },
+    });
+    const plan = optimizeDay(
+      baseInput({ places: [bar, earlyMarket], homeByMin: 23 * 60 + 59 })
+    );
+    expect(plan.warnings.filter((w) => /after .*closes/.test(w))).toEqual([]);
+  });
+
+  it('says plainly when a place cannot fit the day at all', () => {
+    // Opens at 19:00; the day ends at 14:00. No order can visit it, and the
+    // planner never trims a selection, so the plan must say so and point at
+    // splitting the trip rather than leaving a silent five-hour wait.
+    const nightMarket = makePlace('night-market', 0.009, {
+      openHours: { open: 19 * 60, close: 23 * 60 },
+    });
+    const plan = optimizeDay(
+      baseInput({ places: [nightMarket, makePlace('a', 0.004)], homeByMin: 14 * 60 })
+    );
+    const all = plan.warnings.join(' ');
+    expect(all).toContain('closed for the whole of your day');
+    expect(all).toContain("won't fit this day");
+    expect(all).toContain('several days');
+  });
+
+  it('counts a place shut before the day starts as one problem, not two', () => {
+    // Closed at 08:00 for a 09:00 start: it is unfittable AND a closing
+    // violation, and the summary must say "One", not "2".
+    const dawnMarket = makePlace('dawn-market', 0.009, {
+      openHours: { open: 5 * 60, close: 8 * 60 },
+    });
+    const plan = optimizeDay(
+      baseInput({ places: [dawnMarket, makePlace('a', 0.004)] })
+    );
+    const summary = plan.warnings.find((w) => w.includes("won't fit this day"));
+    expect(summary).toBeDefined();
+    expect(summary).toContain('One of these places');
+  });
+
+  it('stays quiet about fit when every place can be visited', () => {
+    const plan = optimizeDay(
+      baseInput({ places: [makePlace('a', 0.004), makePlace('b', 0.012)] })
+    );
+    expect(plan.warnings.join(' ')).not.toContain("won't fit");
+  });
+
+  it('suggests a later start when the day opens with a long wait', () => {
+    const bar = makePlace('night-bar', 0.004, {
+      openHours: { open: 17 * 60, close: 26 * 60 },
+    });
+    const cafe = makePlace('cafe', 0.012, {
+      openHours: { open: 7 * 60, close: 21 * 60 },
+    });
+    const plan = optimizeDay(
+      baseInput({ places: [bar, cafe], homeByMin: 23 * 60 + 59 })
+    );
+    expect(plan.totals.waitMin).toBeGreaterThan(60);
+    expect(plan.warnings.join(' ')).toMatch(/Leaving at .* instead would cut/);
+  });
+
+  it('keeps the promise it makes about that later start', () => {
+    // The test that matters. An earlier version checked candidates by
+    // rescheduling the *existing* order, but a different start can produce a
+    // different tour — so the plan a user actually got by following the
+    // advice finished 24 minutes later than promised. Re-plan at the
+    // suggested time and hold it to its word.
+    const bar = makePlace('night-bar', 0.004, {
+      openHours: { open: 17 * 60, close: 26 * 60 },
+    });
+    const cafe = makePlace('cafe', 0.012, {
+      openHours: { open: 7 * 60, close: 21 * 60 },
+    });
+    const input = baseInput({ places: [bar, cafe], homeByMin: 23 * 60 + 59 });
+    const plan = optimizeDay(input);
+
+    const advice = plan.warnings.find((w) => w.startsWith('Leaving at '))!;
+    const [, hh, mm] = advice.match(/Leaving at (\d+):(\d+)/)!;
+    const suggested = Number(hh) * 60 + Number(mm);
+
+    const after = optimizeDay({ ...input, dayStartMin: suggested });
+    expect(after.homeMin).toBeLessThanOrEqual(plan.homeMin);
+    expect(after.totals.waitMin).toBeLessThan(plan.totals.waitMin);
+    expect(after.stops).toHaveLength(plan.stops.length);
+  });
+
+  it('says nothing about starting later when there is no waiting', () => {
+    const plan = optimizeDay(
+      baseInput({ places: [makePlace('a', 0.004), makePlace('b', 0.012)] })
+    );
+    expect(plan.warnings.join(' ')).not.toContain('Leaving at');
+  });
+
+  it('names the finish that would fit a place opening after the day ends', () => {
+    const nightMarket = makePlace('night-market', 0.009, {
+      openHours: { open: 19 * 60, close: 23 * 60 },
+      visitDurationMin: 60,
+    });
+    const plan = optimizeDay(
+      baseInput({ places: [nightMarket, makePlace('a', 0.004)], homeByMin: 14 * 60 })
+    );
+    expect(plan.warnings.join(' ')).toContain('a day running to 20:00 would fit it in');
+  });
+
+  it('does not offer a later start when something cannot fit at all', () => {
+    // Two competing pieces of advice read as noise, and the later start does
+    // not rescue a place that is shut for the whole window anyway.
+    const nightMarket = makePlace('night-market', 0.009, {
+      openHours: { open: 19 * 60, close: 23 * 60 },
+    });
+    const plan = optimizeDay(
+      baseInput({ places: [nightMarket, makePlace('a', 0.004)], homeByMin: 14 * 60 })
+    );
+    expect(plan.warnings.join(' ')).not.toContain('Leaving at');
+  });
+
+  it('accepts a short wait rather than churning the order', () => {
+    // A 20-minute wait is a coffee, not a defect. Below the threshold the
+    // repair must leave the tour alone.
+    const cafe = makePlace('brunch-cafe', 0.004, {
+      openHours: { open: 9 * 60 + 30, close: 22 * 60 },
+    });
+    const other = makePlace('a', 0.012);
+    const plan = optimizeDay(baseInput({ places: [cafe, other] }));
+    expect(plan.stops[0].place.id).toBe('brunch-cafe');
+    expect(plan.stops[0].waitMin).toBeGreaterThan(0);
+    expect(plan.stops[0].waitMin).toBeLessThanOrEqual(30);
+  });
 });
 
 // ——— Cost reporting ——————————————————————————————————————————————
@@ -261,21 +452,124 @@ describe('cost reporting', () => {
   /**
    * PRD §3.3 removed the budget cap: cost is reported, never enforced. An
    * earlier revision downgraded legs until a day fit a ceiling. A user who
-   * wants a cheap day picks the Most Economic objective instead.
+   * wants a cheap day picks the Most Economic objective instead — and that
+   * objective must decline the expensive leg by construction, on the same
+   * leg where Fastest buys it.
    */
-  it('reports day cost without capping or warning about it', () => {
-    const pricey = makePlace('pricey', 0.009, { avgCostUsd: 5000 });
+  it('keeps a day cheap through the goal, not through a cap', () => {
+    const far = makePlace('far-spot', FASTEST_BUYS_A_CAR_OFFSET);
+    const shared = { places: [far], legOptions: mockLegOptions };
+    const fastest = optimizeDay(baseInput({ ...shared, goal: 'fastest' }));
+    const economic = optimizeDay(baseInput({ ...shared, goal: 'economic' }));
+
+    expect(fastest.stops[0].leg.mode).toBe('rideshare');
+    expect([economic.stops[0].leg.mode, economic.returnLeg!.mode]).not.toContain(
+      'rideshare'
+    );
+    expect(economic.totals.travelUsd).toBeLessThan(fastest.totals.travelUsd);
+  });
+
+  it('totals the fares and nothing else, and never warns on cost', () => {
+    // Previously asserted travel plus at-place spend. What a place costs is
+    // an estimate on an unverified fixture, so it is no longer added to a
+    // figure a user would budget against — an expensive stop must leave the
+    // day total untouched. The budget warning went with the cap in v0.4 and
+    // is still gone.
+    const pricey = makePlace('pricey', 0.009, { avgCostUsd: 50 });
     const plan = optimizeDay(baseInput({ places: [pricey] }));
-    expect(plan.totals.totalUsd).toBe(5000);
+    expect(plan.totals.totalUsd).toBe(plan.totals.travelUsd);
+    expect(plan.totals.totalUsd).toBeLessThan(50);
     expect(plan.warnings.join(' ')).not.toMatch(/budget/i);
   });
 
-  it('totals travel and at-place spend separately', () => {
-    const plan = optimizeDay(sfInput('balanced'));
-    const spend = plan.stops.reduce((s, x) => s + x.place.avgCostUsd, 0);
-    expect(plan.totals.spendUsd).toBe(spend);
-    expect(plan.totals.totalUsd).toBe(plan.totals.travelUsd + spend);
+  it('is unmoved by how expensive the places themselves are', () => {
+    // The reason the spend came out of the total: the same places are visited
+    // whichever route wins, so at-place cost is a constant across the four
+    // objectives and adding it only compressed the difference between them.
+    // Same geometry, wildly different prices, identical day total.
+    const cheap = [
+      makePlace('a', 0.009, { avgCostUsd: 0 }),
+      makePlace('b', 0.02, { avgCostUsd: 0 }),
+    ];
+    const dear = [
+      makePlace('a', 0.009, { avgCostUsd: 400 }),
+      makePlace('b', 0.02, { avgCostUsd: 600 }),
+    ];
+    expect(optimizeDay(baseInput({ places: dear })).totals.totalUsd).toBe(
+      optimizeDay(baseInput({ places: cheap })).totals.totalUsd
+    );
   });
+
+  it('costs every leg individually so cost stays visible per leg', () => {
+    const plan = optimizeDay(sfInput('balanced'));
+    for (const s of plan.stops) {
+      expect(typeof s.leg.costUsd).toBe('number');
+      expect(s.leg.costUsd).toBeGreaterThanOrEqual(0);
+    }
+    const legSum =
+      plan.stops.reduce((n, s) => n + s.leg.costUsd, 0) + plan.returnLeg!.costUsd;
+    expect(plan.totals.travelUsd).toBe(legSum);
+  });
+});
+
+// ——— Least walking ————————————————————————————————————————————————
+
+describe('least walking', () => {
+  /**
+   * `leastWalking` is not a point on the cost axis the other three share.
+   * Walking is free, so moving along that axis makes walking more attractive,
+   * not less — the objective needs its own penalty term, and these tests
+   * exist to catch anyone folding it back into a cost weight.
+   */
+  it('boards a vehicle for a walk the other goals would take', () => {
+    const [a, b] = walkableGap();
+    const balanced = __internals.chooseLeg(mockLegOptions(a, b), 'balanced');
+    const least = __internals.chooseLeg(mockLegOptions(a, b), 'leastWalking');
+    expect(balanced.mode).toBe('walk');
+    expect(least.mode).not.toBe('walk');
+  });
+
+  it('still walks a distance no vehicle is worth boarding for', () => {
+    // Under the free allowance. A planner that called a car to cross a plaza
+    // would be useless, whatever the objective.
+    const [a, b] = nearPair(0.2);
+    expect(__internals.chooseLeg(mockLegOptions(a, b), 'leastWalking').mode).toBe(
+      'walk'
+    );
+  });
+
+  it('walks less than every other objective over a whole day', () => {
+    const places = [0.004, 0.012, 0.02, 0.028].map((off, i) =>
+      makePlace(`w${i}`, off)
+    );
+    const walkKm = (goal: Goal) => {
+      const plan = optimizeDay(
+        baseInput({ places, goal, legOptions: mockLegOptions })
+      );
+      const legs = [...plan.stops.map((s) => s.leg), plan.returnLeg!];
+      return legs
+        .filter((l) => l.mode === 'walk')
+        .reduce((sum, l) => sum + l.distanceKm, 0);
+    };
+    const least = walkKm('leastWalking');
+    for (const goal of ['economic', 'balanced', 'fastest'] as const) {
+      expect(least).toBeLessThanOrEqual(walkKm(goal));
+    }
+  });
+
+  /**
+   * The penalty is linear past a threshold rather than flat, because the goal
+   * is to prefer the *shorter* of two walks and not merely to avoid walking:
+   * a flat surcharge would score a 400 m walk and a 2 km walk identically.
+   */
+  it('prefers the shorter of two walks rather than treating both alike', () => {
+    const short = { mode: 'walk' as const, durationMin: 5, costUsd: 0, distanceKm: 0.4 };
+    const long = { mode: 'walk' as const, durationMin: 24, costUsd: 0, distanceKm: 2.0 };
+    expect(__internals.legScore(short, 'leastWalking')).toBeLessThan(
+      __internals.legScore(long, 'leastWalking')
+    );
+  });
+
 });
 
 // ——— Day window ———————————————————————————————————————————————————
@@ -316,12 +610,16 @@ describe('scale', () => {
   });
 
   /**
-   * KNOWN GAP — the day window and budget cap are advisory, not enforced.
-   * The optimizer schedules every place it is given and only warns when the
-   * result overruns; it never drops a stop to make the day fit. Handed the
-   * whole catalogue it returns a "day" that ends 28 days later and costs 60x
-   * the cap. This test pins that behaviour so the gap is visible rather than
-   * implied, and will need rewriting when the constraints become real.
+   * KNOWN GAP — the day window is advisory, not enforced. The optimizer
+   * schedules every place it is given and only warns when the result
+   * overruns; it never drops a stop to make the day fit. Handed the whole
+   * catalogue it returns a "day" that ends weeks later. This test pins that
+   * behaviour so the gap is visible rather than implied, and will need
+   * rewriting when the constraint becomes real.
+   *
+   * Sizing a *suggested* day is a separate job and does have limits: see
+   * `deriveStopCount` in lib/planner.ts, which caps what is offered unasked.
+   * Nothing trims a selection the user assembled themselves.
    */
   it('documents that the day window is advisory, not a constraint', () => {
     const homeByMin = 21 * 60; // the 9:00–21:00 window from baseInput
@@ -334,7 +632,6 @@ describe('scale', () => {
 
     expect(plan.stops).toHaveLength(bayAreaPlaces.length); // nothing dropped
     expect(overrunDays).toBeGreaterThan(20);               // ~28 days late
-    expect(plan.totals.totalUsd).toBeGreaterThan(5000);    // cap is $150
     // The only thing standing between the user and this nonsense is a warning.
     expect(plan.warnings.join(' ')).toMatch(/past your/);
   });

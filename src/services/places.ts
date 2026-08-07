@@ -1,4 +1,5 @@
 import { config } from '../config';
+import { haversineKm } from '../lib/geo';
 import type { Landmark, LatLng, CuratedPlace } from '../domain/types';
 import { bayAreaLandmarks } from './mock/landmarks';
 import { bayAreaPlaces } from './mock/bayAreaPlaces';
@@ -22,6 +23,11 @@ export interface PlacesService {
   getPlace(id: string): Promise<CuratedPlace | undefined>;
   /** Free-text place search, biased toward `near` when supplied. */
   searchPlaces(query: string, near?: LatLng): Promise<CuratedPlace[]>;
+  /**
+   * Places nearest a point, closest first. Resolves "where am I" at stamp
+   * time from a single foreground location fix.
+   */
+  nearbyPlaces(to: LatLng, limitKm?: number): Promise<CuratedPlace[]>;
 }
 
 class MockPlacesService implements PlacesService {
@@ -43,6 +49,14 @@ class MockPlacesService implements PlacesService {
     const q = query.trim().toLowerCase();
     if (!q) return bayAreaPlaces;
     return bayAreaPlaces.filter((p) => p.name.toLowerCase().includes(q));
+  }
+
+  async nearbyPlaces(to: LatLng, limitKm = 1.5): Promise<CuratedPlace[]> {
+    return bayAreaPlaces
+      .map((place) => ({ place, km: haversineKm(to, place.location) }))
+      .filter((x) => x.km <= limitKm)
+      .sort((a, b) => a.km - b.km)
+      .map((x) => x.place);
   }
 }
 

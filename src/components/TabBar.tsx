@@ -8,10 +8,10 @@ import { colors } from '../theme/colors';
 type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
 
 const TAB_META: Record<string, { icon: IconName; label: string }> = {
-  Discover: { icon: 'compass-outline', label: 'Discover' },
+  Memories: { icon: 'view-dashboard-outline', label: 'Diary' },
   Explore: { icon: 'map-search-outline', label: 'Explore' },
-  Trips: { icon: 'routes', label: 'Trips' },
-  Profile: { icon: 'account-outline', label: 'Profile' },
+  Plan: { icon: 'routes', label: 'Plan' },
+  Settings: { icon: 'cog-outline', label: 'Settings' },
 };
 
 /**
@@ -51,20 +51,23 @@ export function TabBar({ state, navigation }: BottomTabBarProps) {
     );
   };
 
+  // Center button splits the tabs into two halves. Rendered from the live
+  // route list rather than fixed indices, so the bar stays correct while the
+  // Phase 1 tabs (Wall, Summary) are still being added.
+  const split = Math.ceil(state.routes.length / 2);
+
   return (
     <View style={[styles.bar, { paddingBottom: insets.bottom }]}>
-      {renderTab(0)}
-      {renderTab(1)}
+      {state.routes.slice(0, split).map((_, i) => renderTab(i))}
       <View style={styles.tab}>
         <Pressable
           style={({ pressed }) => [styles.center, pressed && styles.centerPressed]}
-          onPress={() => navigation.navigate('Plan' as never)}
+          onPress={() => navigation.navigate('Stamp' as never)}
         >
-          <MaterialCommunityIcons name="map-outline" size={24} color="#FFFFFF" />
+          <MaterialCommunityIcons name="plus" size={26} color="#FFFFFF" />
         </Pressable>
       </View>
-      {renderTab(2)}
-      {renderTab(3)}
+      {state.routes.slice(split).map((_, i) => renderTab(split + i))}
     </View>
   );
 }

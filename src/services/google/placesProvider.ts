@@ -1,6 +1,7 @@
 import type { Landmark, LatLng, CuratedPlace } from '../../domain/types';
 import { bayAreaLandmarks } from '../mock/landmarks';
 import { bayAreaPlaces } from '../mock/bayAreaPlaces';
+import { haversineKm } from '../../lib/geo';
 import type { PlacesService } from '../places';
 import { fetchJson, placesEndpoint, placesHeaders } from './http';
 import { toPlace, type GooglePlace } from './placeMapping';
@@ -103,5 +104,23 @@ export class GooglePlacesService implements PlacesService {
       const lower = q.toLowerCase();
       return all.filter((p) => p.name.toLowerCase().includes(lower));
     }
+  }
+
+  /**
+   * Nearest places to a point, closest first.
+   *
+   * Served from what we already hold — the seed set plus anything discovered
+   * this session — rather than a Nearby Search call. Stamping runs the moment
+   * the user taps, so the screen must answer instantly, and a live call here
+   * would also spend quota on every stamp for a question the local data
+   * already answers well.
+   */
+  async nearbyPlaces(to: LatLng, limitKm = 1.5): Promise<CuratedPlace[]> {
+    const all = await this.listPlaces();
+    return all
+      .map((place) => ({ place, km: haversineKm(to, place.location) }))
+      .filter((x) => x.km <= limitKm)
+      .sort((a, b) => a.km - b.km)
+      .map((x) => x.place);
   }
 }

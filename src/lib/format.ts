@@ -55,3 +55,32 @@ export function formatDuration(min: number): string {
   const rest = m % 60;
   return rest === 0 ? `${h} h` : `${h} h ${rest} min`;
 }
+
+/**
+ * Coarse "how long ago" for a day count. Deliberately vague past a week —
+ * a diary reads better as "3w ago" than a date nobody can place.
+ */
+export function relativeDays(days: number): string {
+  if (days === 0) return 'today';
+  if (days === 1) return 'yesterday';
+  if (days < 7) return `${days}d ago`;
+  if (days < 30) return `${Math.floor(days / 7)}w ago`;
+  if (days < 365) return `${Math.floor(days / 30)}mo ago`;
+  return `${Math.floor(days / 365)}y ago`;
+}
+
+/** 1st, 2nd, 3rd, 4th… for visit counts. */
+export function ordinal(n: number): string {
+  const rem100 = n % 100;
+  if (rem100 >= 11 && rem100 <= 13) return `${n}th`;
+  switch (n % 10) {
+    case 1:
+      return `${n}st`;
+    case 2:
+      return `${n}nd`;
+    case 3:
+      return `${n}rd`;
+    default:
+      return `${n}th`;
+  }
+}

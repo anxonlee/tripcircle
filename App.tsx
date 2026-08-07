@@ -6,41 +6,60 @@ import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { ErrorBoundary } from './src/components/ErrorBoundary';
+import { TabBar } from './src/components/TabBar';
 import type { RootStackParamList, TabParamList } from './src/navigation';
+import { DiaryScreen } from './src/screens/DiaryScreen';
+import { EditVisitScreen } from './src/screens/EditVisitScreen';
+import { MemoriesScreen } from './src/screens/MemoriesScreen';
 import { PlacesScreen } from './src/screens/PlacesScreen';
 import { PlanScreen } from './src/screens/PlanScreen';
+import { PlanSuggestScreen } from './src/screens/PlanSuggestScreen';
+import { PrivacyScreen } from './src/screens/PrivacyScreen';
 import { SetupScreen } from './src/screens/SetupScreen';
+import { StampScreen } from './src/screens/StampScreen';
+import { SettingsScreen } from './src/screens/SettingsScreen';
+import { useDiaryStore } from './src/store/useDiaryStore';
 import { useTripStore } from './src/store/useTripStore';
 import { colors } from './src/theme/colors';
 
-/**
- * INTERIM SHELL — mid-port.
- *
- * The Phase 2–4 tabs (Discover, Trips, Profile) moved to `src/_legacy` when
- * the MVP was resequenced around the place diary, and the Phase 1 tabs that
- * replace them — Memories, Explore, Plan, Settings — are still being ported.
- * Until they land this is a plain stack over the three screens that exist, so
- * the app runs and the type-check stays honest. `src/navigation.ts` already
- * declares the target routes.
- */
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<TabParamList>();
 
-/** One tab for now; the custom five-slot bar returns with the other three. */
 function Tabs() {
   return (
-    <Tab.Navigator screenOptions={{ headerShown: false }}>
+    <Tab.Navigator
+      tabBar={(props) => <TabBar {...props} />}
+      screenOptions={{ headerShown: false }}
+    >
+      <Tab.Screen name="Memories" component={MemoriesScreen} />
       <Tab.Screen name="Explore" component={PlacesScreen} />
+      <Tab.Screen name="Plan" component={PlanSuggestScreen} />
+      <Tab.Screen name="Settings" component={SettingsScreen} />
     </Tab.Navigator>
   );
 }
 
-/** Wait for AsyncStorage rehydration before deciding the initial screen. */
+/**
+ * Wait for AsyncStorage rehydration before deciding the initial screen.
+ * Both stores must land: showing an empty memory wall to someone with a
+ * diary would read as data loss, which is the worst possible first frame.
+ */
 function useHydrated(): boolean {
-  const [hydrated, setHydrated] = useState(useTripStore.persist.hasHydrated());
+  const [hydrated, setHydrated] = useState(
+    useTripStore.persist.hasHydrated() && useDiaryStore.persist.hasHydrated()
+  );
   useEffect(() => {
-    const unsub = useTripStore.persist.onFinishHydration(() => setHydrated(true));
-    return unsub;
+    const check = () =>
+      setHydrated(
+        useTripStore.persist.hasHydrated() && useDiaryStore.persist.hasHydrated()
+      );
+    const unsubTrip = useTripStore.persist.onFinishHydration(check);
+    const unsubDiary = useDiaryStore.persist.onFinishHydration(check);
+    return () => {
+      unsubTrip();
+      unsubDiary();
+    };
   }, []);
   return hydrated;
 }
@@ -59,7 +78,8 @@ export default function App() {
 
   return (
     <GestureHandlerRootView style={styles.root}>
-      <SafeAreaProvider>
+      <ErrorBoundary>
+        <SafeAreaProvider>
         <StatusBar style="dark" />
         <NavigationContainer>
           <Stack.Navigator
@@ -69,9 +89,14 @@ export default function App() {
             <Stack.Screen name="Tabs" component={Tabs} />
             <Stack.Screen name="Setup" component={SetupScreen} />
             <Stack.Screen name="DayPlan" component={PlanScreen} />
+            <Stack.Screen name="Stamp" component={StampScreen} />
+            <Stack.Screen name="Privacy" component={PrivacyScreen} />
+            <Stack.Screen name="Diary" component={DiaryScreen} />
+            <Stack.Screen name="EditVisit" component={EditVisitScreen} />
           </Stack.Navigator>
         </NavigationContainer>
-      </SafeAreaProvider>
+        </SafeAreaProvider>
+      </ErrorBoundary>
     </GestureHandlerRootView>
   );
 }

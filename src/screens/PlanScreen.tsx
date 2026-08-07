@@ -1,19 +1,32 @@
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CategoryPin, PIN_ANCHOR, PinSlot, StartPin } from '../components/CategoryPin';
+import { DayWindowControl } from '../components/DayWindowControl';
 import { transportIcon, transportLabel } from '../components/icons';
 import { TimelineNode } from '../components/IconTile';
 import type { CuratedPlace, TransportMode } from '../domain/types';
-import { formatTime } from '../lib/geo';
-import { formatDuration, formatUsd } from '../lib/format';
+import { formatDayEnd, formatTime } from '../lib/geo';
+import {
+  formatDayTotal,
+  formatDuration,
+  formatUsd,
+  formatPriceBand,
+} from '../lib/format';
 import {
   optimizeDay,
-  withAvailableModes,
   type DayPlan,
   type Goal,
   type LegOptionsFn,
@@ -27,10 +40,31 @@ import { colors } from '../theme/colors';
 type Props = NativeStackScreenProps<RootStackParamList, 'DayPlan'>;
 
 /**
+ * The four objectives, in the order they appear in the bar and the pager.
+ * Ordered as a spectrum on money-versus-time, with Least Walking last
+ * because it sits on a different axis entirely.
+ *
+ * "Least Walking" is a literal description of what the optimiser does: it
+ * penalises walking distance. It is deliberately not called accessible,
+ * step-free, or wheelchair-friendly. The model holds no accessibility data —
+ * no lift locations, no step-free exits, no low-floor vehicle information —
+ * so any of those labels would be a claim the software cannot support.
+ */
+const OBJECTIVES: { goal: Goal; label: string; icon: 'piggy-bank-outline' | 'scale-balance' | 'lightning-bolt' | 'seat-passenger' }[] = [
+  { goal: 'economic', label: 'Economic', icon: 'piggy-bank-outline' },
+  { goal: 'balanced', label: 'Balanced', icon: 'scale-balance' },
+  { goal: 'fastest', label: 'Fastest', icon: 'lightning-bolt' },
+  { goal: 'leastWalking', label: 'Least Walking', icon: 'seat-passenger' },
+];
+
+/**
  * Plan day — the optimizer's output made visible (ui-guide §1.4: never show
  * an optimized result without its numbers). Clay dashed loop on the map,
  * numbered pins in route order, summary cells, timeline with leg chips, and
- * the Balanced/Fastest toggle with its delta.
+ * a four-objective bar over a swipeable pager.
+ *
+ * All four plans are solved once when the selection changes and held in a
+ * memo. Switching objective, by tap or by swipe, only reads that cache.
  */
 export function PlanScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
@@ -38,58 +72,73 @@ export function PlanScreen({ navigation }: Props) {
   const selectedIds = useTripStore((s) => s.selectedPlaceIds);
   const goal = useTripStore((s) => s.goal);
   const setGoal = useTripStore((s) => s.setGoal);
+  const togglePlace = useTripStore((s) => s.togglePlace);
   const dayStartMin = useTripStore((s) => s.dayStartMin);
   const homeByMin = useTripStore((s) => s.homeByMin);
-  const hasCar = useTripStore((s) => s.hasCar);
-  const setHasCar = useTripStore((s) => s.setHasCar);
+  const setDayWindow = useTripStore((s) => s.setDayWindow);
   const highlightedId = useUiStore((s) => s.highlightedPlaceId);
   const setHighlighted = useUiStore((s) => s.setHighlighted);
+  const { width } = useWindowDimensions();
 
   const [selectedPlaces, setSelectedPlaces] = useState<CuratedPlace[]>([]);
   const [legOptionsFn, setLegOptionsFn] = useState<LegOptionsFn | null>(null);
   const mapRef = useRef<MapView>(null);
+  const pagerRef = useRef<ScrollView>(null);
 
   useEffect(() => {
-    let alive = true;
-    (async () => {
-      const all = await placesService.listPlaces();
-      if (!alive) return;
+    placesService.listPlaces().then((all) => {
       const byId = new Map(all.map((p) => [p.id, p]));
-      const picked = selectedIds
-        .map((id) => byId.get(id))
-        .filter((p): p is CuratedPlace => !!p);
-      setSelectedPlaces(picked);
+      setSelectedPlaces(
+        selectedIds.map((id) => byId.get(id)).filter((p): p is CuratedPlace => !!p)
+      );
+    });
+    routingService.getLegOptionsFn().then((fn) => setLegOptionsFn(() => fn));
+  }, [selectedIds]);
 
-      // Prefetch travel estimates for exactly the points this plan will route
-      // between, then hand the optimizer a synchronous lookup.
-      const points = startPlace
-        ? [startPlace.location, ...picked.map((p) => p.location)]
-        : picked.map((p) => p.location);
-      const fn = await routingService.getLegOptionsFn(points);
-      if (alive) setLegOptionsFn(() => fn);
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [selectedIds, startPlace]);
-
+  /**
+   * Every objective is solved here, once, and cached until the selection
+   * changes. Four solves of a typical day cost single-digit milliseconds
+   * together, so paying for all of them up front buys instant switching.
+   */
   const plans = useMemo<Record<Goal, DayPlan> | null>(() => {
     if (!startPlace || !legOptionsFn || selectedPlaces.length === 0) return null;
-    if (hasCar === null) return null; // ask first; do not guess a mode set
     const base = {
       startPlace,
       places: selectedPlaces,
       dayStartMin,
       homeByMin,
-      legOptions: withAvailableModes(legOptionsFn, { hasCar }),
+      legOptions: legOptionsFn,
     };
     return {
+      economic: optimizeDay({ ...base, goal: 'economic' }),
       balanced: optimizeDay({ ...base, goal: 'balanced' }),
       fastest: optimizeDay({ ...base, goal: 'fastest' }),
+      leastWalking: optimizeDay({ ...base, goal: 'leastWalking' }),
     };
-  }, [startPlace, selectedPlaces, legOptionsFn, dayStartMin, homeByMin, hasCar]);
+  }, [startPlace, selectedPlaces, legOptionsFn, dayStartMin, homeByMin]);
 
   const plan = plans?.[goal] ?? null;
+  const goalIndex = OBJECTIVES.findIndex((o) => o.goal === goal);
+
+  /** Tap on the bar: move the pager, which is the single source of truth. */
+  const selectGoal = useCallback(
+    (next: Goal) => {
+      const i = OBJECTIVES.findIndex((o) => o.goal === next);
+      pagerRef.current?.scrollTo({ x: i * width, animated: true });
+      setGoal(next);
+    },
+    [width, setGoal]
+  );
+
+  /** Swipe: keep the bar in sync. Reads cache only, never re-solves. */
+  const onPagerSettled = useCallback(
+    (x: number) => {
+      const i = Math.round(x / width);
+      const next = OBJECTIVES[i]?.goal;
+      if (next && next !== goal) setGoal(next);
+    },
+    [width, goal, setGoal]
+  );
 
   const routeCoords = useMemo(() => {
     if (!plan || !startPlace) return [];
@@ -109,7 +158,139 @@ export function PlanScreen({ navigation }: Props) {
     }
   }, [routeCoords, insets.top]);
 
+  /**
+   * Drop a stop from the day. Editing the selection is enough: the four plans
+   * are a memo over it, so all of them re-solve and the map redraws.
+   *
+   * A day needs two stops to be a day, so the last two are not removable —
+   * better to refuse than to drop the user into the empty state from a
+   * control that looked like a tidy-up.
+   */
+  const removeStop = useCallback(
+    (placeId: string, placeName: string) => {
+      if (selectedIds.length <= 2) {
+        Alert.alert(
+          'Keep at least two places',
+          'A day out needs somewhere to go and somewhere to go next. Add another place in Explore before removing this one.'
+        );
+        return;
+      }
+      Alert.alert(`Remove ${placeName}?`, 'The rest of the day re-plans around it.', [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => togglePlace(placeId),
+        },
+      ]);
+    },
+    [selectedIds.length, togglePlace]
+  );
+
   const snapPoints = useMemo(() => ['35%', '60%', '90%'], []);
+
+  /**
+   * One objective's timeline. Rendered four times into the pager, so it takes
+   * the plan rather than reading the selected one.
+   */
+  const renderTimeline = (p: DayPlan) => (
+    <>
+      <View style={styles.timelineRow}>
+        <View style={styles.gutter}>
+          <StartPin size={30} />
+        </View>
+        <Text style={styles.anchorText}>Leave {formatTime(p.dayStartMin)}</Text>
+      </View>
+
+      {p.stops.map((s) => (
+        <View key={s.place.id}>
+          <LegRow mode={s.leg.mode} durationMin={s.leg.durationMin} costUsd={s.leg.costUsd} />
+          <Pressable
+            onPress={() => {
+              setHighlighted(s.place.id);
+              mapRef.current?.animateToRegion(
+                { ...s.place.location, latitudeDelta: 0.02, longitudeDelta: 0.02 },
+                200
+              );
+            }}
+            style={[
+              styles.timelineRow,
+              highlightedId === s.place.id && styles.stopHighlighted,
+            ]}
+          >
+            <View style={styles.gutter}>
+              <TimelineNode categories={s.place.themes} label={String(s.order)} />
+            </View>
+            <View style={styles.stopBody}>
+              <Text style={styles.stopName} numberOfLines={1}>
+                {s.place.name}
+              </Text>
+              <Text style={styles.stopCost}>
+                {s.place.priceBand !== 'free' ? `${formatPriceBand(s.place.priceBand)} · ` : ''}
+                {s.place.visitDurationMin} min visit
+                {s.waitMin >= 15 ? ` · wait ${s.waitMin} min` : ''}
+              </Text>
+              {s.warnings.map((w, i) => (
+                <View key={i} style={styles.warningRow}>
+                  <MaterialCommunityIcons
+                    name="alert-outline"
+                    size={12}
+                    color={colors.warning}
+                  />
+                  <Text style={styles.warningText}>{w}</Text>
+                </View>
+              ))}
+            </View>
+            <View style={styles.stopTail}>
+              <Text style={styles.stopTime}>{formatTime(s.arriveMin)}</Text>
+              <Pressable
+                onPress={() => removeStop(s.place.id, s.place.name)}
+                hitSlop={10}
+                style={styles.removeStop}
+              >
+                <MaterialCommunityIcons
+                  name="close"
+                  size={14}
+                  color={colors.textMuted}
+                />
+              </Pressable>
+            </View>
+          </Pressable>
+        </View>
+      ))}
+
+      {p.returnLeg && (
+        <>
+          <LegRow
+            mode={p.returnLeg.mode}
+            durationMin={p.returnLeg.durationMin}
+            costUsd={p.returnLeg.costUsd}
+          />
+          <View style={styles.timelineRow}>
+            <View style={styles.gutter}>
+              <StartPin size={30} />
+            </View>
+            <Text style={styles.anchorText}>Home by {formatDayEnd(p.homeMin)}</Text>
+          </View>
+        </>
+      )}
+
+      {p.warnings.length > 0 && (
+        <View style={styles.dayWarnings}>
+          {p.warnings.map((w, i) => (
+            <View key={i} style={styles.warningRow}>
+              <MaterialCommunityIcons
+                name="alert-outline"
+                size={12}
+                color={colors.warning}
+              />
+              <Text style={styles.warningText}>{w}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+    </>
+  );
 
   if (!startPlace || selectedIds.length < 2) {
     return (
@@ -127,62 +308,12 @@ export function PlanScreen({ navigation }: Props) {
     );
   }
 
-  if (hasCar === null) {
-    return (
-      <View style={styles.ask}>
-        <MaterialCommunityIcons name="car-outline" size={26} color={colors.textSecondary} />
-        <Text style={styles.askTitle}>Do you have a car today?</Text>
-        <Text style={styles.askBody}>
-          It changes the plan a lot. Driving is usually the cheapest way across
-          the Bay and one of the priciest ways to go two blocks.
-        </Text>
-        <View style={styles.askRow}>
-          <Pressable
-            style={({ pressed }) => [styles.askBtn, pressed && styles.askBtnPressed]}
-            onPress={() => setHasCar(false)}
-          >
-            <MaterialCommunityIcons name="walk" size={17} color={colors.textPrimary} />
-            <Text style={styles.askBtnText}>No car</Text>
-          </Pressable>
-          <Pressable
-            style={({ pressed }) => [styles.askBtn, pressed && styles.askBtnPressed]}
-            onPress={() => setHasCar(true)}
-          >
-            <MaterialCommunityIcons name="car" size={17} color={colors.textPrimary} />
-            <Text style={styles.askBtnText}>Driving</Text>
-          </Pressable>
-        </View>
-        <Pressable style={styles.loadingBack} onPress={() => navigation.goBack()}>
-          <Text style={styles.loadingBackText}>Back</Text>
-        </Pressable>
-      </View>
-    );
-  }
-
   if (!plan || !plans) {
     return (
       <View style={styles.loading}>
         <Text style={styles.loadingText}>Planning your day…</Text>
       </View>
     );
-  }
-
-  const other = plans[goal === 'balanced' ? 'fastest' : 'balanced'];
-  const fasterMin =
-    goal === 'balanced'
-      ? plan.totals.travelMin - other.totals.travelMin
-      : other.totals.travelMin - plan.totals.travelMin;
-  const extraUsd =
-    goal === 'balanced'
-      ? other.totals.travelUsd - plan.totals.travelUsd
-      : plan.totals.travelUsd - other.totals.travelUsd;
-  let tradeoff: string;
-  if (fasterMin <= 0 && extraUsd <= 0) {
-    tradeoff = 'Same plan under both goals today';
-  } else if (goal === 'balanced') {
-    tradeoff = `Fastest: ${formatDuration(fasterMin)} faster · ${formatUsd(extraUsd)} more`;
-  } else {
-    tradeoff = `${formatDuration(fasterMin)} faster · ${formatUsd(extraUsd)} more than Balanced`;
   }
 
   return (
@@ -240,175 +371,142 @@ export function PlanScreen({ navigation }: Props) {
         <Text style={styles.backChipText}>Back</Text>
       </Pressable>
 
-      {/*
-        Sharing a day was a Phase 2 feature and its target screen now lives in
-        `src/_legacy`. The control is removed rather than disabled: a button
-        that cannot go anywhere is worse than no button.
-      */}
+      {/* Publishing a plan is Phase 3 (PRD §14) — the share affordance lives
+          in src/_legacy until the feed and moderation tooling ship. */}
 
       <BottomSheet
         index={1}
         snapPoints={snapPoints}
+        // Without this the sheet can travel past the status bar at its
+        // tallest snap point, and "Day plan" renders through the clock.
+        // Bounding the travel is the fix rather than padding the header,
+        // which would leave a white gap at every other snap point.
+        topInset={insets.top}
         backgroundStyle={styles.sheet}
         handleIndicatorStyle={styles.handle}
       >
         <View style={styles.sheetTop}>
           <View style={styles.sheetHeaderText}>
             <Text style={styles.sheetTitle}>Day plan</Text>
-            <View style={styles.contextRow}>
-              <Text style={styles.sheetContext}>
-                From {startPlace.name} · leave {formatTime(plan.dayStartMin)}
-              </Text>
-              <Pressable
-                onPress={() => setHasCar(!hasCar)}
-                hitSlop={8}
-                style={styles.carChip}
-              >
-                <MaterialCommunityIcons
-                  name={hasCar ? 'car' : 'walk'}
-                  size={12}
-                  color={colors.textSecondary}
-                />
-                <Text style={styles.carChipText}>
-                  {hasCar ? 'Driving' : 'No car'}
-                </Text>
-              </Pressable>
-            </View>
-          </View>
-          <View style={styles.toggleRow}>
-            <ToggleSeg
-              icon="scale-balance"
-              label="Balanced"
-              active={goal === 'balanced'}
-              onPress={() => setGoal('balanced')}
-            />
-            <ToggleSeg
-              icon="lightning-bolt"
-              label="Fastest"
-              active={goal === 'fastest'}
-              onPress={() => setGoal('fastest')}
+            <Text style={styles.sheetContext}>From {startPlace.name}</Text>
+            <DayWindowControl
+              window={{ dayStartMin, homeByMin }}
+              onChange={setDayWindow}
             />
           </View>
-          <Text style={styles.tradeoff}>{tradeoff}</Text>
+          {/*
+            Four objectives, four columns, all on screen. This was a
+            horizontal scroller and Least Walking sat off the right edge,
+            which defeats the point of showing four answers at once (§6): a
+            comparison you have to scroll to is not a comparison.
+          */}
+          <View style={styles.objectiveBar}>
+            {OBJECTIVES.map((o) => (
+              <ObjectiveSeg
+                key={o.goal}
+                icon={o.icon}
+                label={o.label}
+                total={formatDayTotal(plans[o.goal].totals.totalUsd)}
+                duration={formatDuration(plans[o.goal].totals.travelMin)}
+                active={goal === o.goal}
+                onPress={() => selectGoal(o.goal)}
+              />
+            ))}
+          </View>
           <View style={styles.cellsRow}>
-            <SummaryCell label="Day total" value={formatUsd(plan.totals.totalUsd)} />
+            <SummaryCell
+              label="Fares"
+              value={formatDayTotal(plan.totals.totalUsd)}
+            />
             <SummaryCell label="Travel" value={formatDuration(plan.totals.travelMin)} />
-            <SummaryCell label="Home by" value={formatTime(plan.homeMin)} />
+            <SummaryCell label="Home by" value={formatDayEnd(plan.homeMin)} />
           </View>
         </View>
 
         <BottomSheetScrollView
           contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
         >
-          <View style={styles.timelineRow}>
-            <View style={styles.gutter}>
-              <StartPin size={30} />
-            </View>
-            <Text style={styles.anchorText}>Leave {formatTime(plan.dayStartMin)}</Text>
-          </View>
-
-          {plan.stops.map((s) => (
-            <View key={s.place.id}>
-              <LegRow mode={s.leg.mode} durationMin={s.leg.durationMin} costUsd={s.leg.costUsd} />
-              <Pressable
-                onPress={() => {
-                  setHighlighted(s.place.id);
-                  mapRef.current?.animateToRegion(
-                    { ...s.place.location, latitudeDelta: 0.02, longitudeDelta: 0.02 },
-                    200
-                  );
-                }}
-                style={[
-                  styles.timelineRow,
-                  highlightedId === s.place.id && styles.stopHighlighted,
-                ]}
-              >
-                <View style={styles.gutter}>
-                  <TimelineNode categories={s.place.themes} label={String(s.order)} />
-                </View>
-                <View style={styles.stopBody}>
-                  <Text style={styles.stopName} numberOfLines={1}>
-                    {s.place.name}
-                  </Text>
-                  <Text style={styles.stopCost}>
-                    {s.place.avgCostUsd > 0 ? `${formatUsd(s.place.avgCostUsd)} · ` : ''}
-                    {s.place.visitDurationMin} min visit
-                    {s.waitMin >= 15 ? ` · wait ${s.waitMin} min` : ''}
-                  </Text>
-                  {s.warnings.map((w, i) => (
-                    <View key={i} style={styles.warningRow}>
-                      <MaterialCommunityIcons
-                        name="alert-outline"
-                        size={12}
-                        color={colors.warning}
-                      />
-                      <Text style={styles.warningText}>{w}</Text>
-                    </View>
-                  ))}
-                </View>
-                <Text style={styles.stopTime}>{formatTime(s.arriveMin)}</Text>
-              </Pressable>
-            </View>
-          ))}
-
-          {plan.returnLeg && (
-            <>
-              <LegRow
-                mode={plan.returnLeg.mode}
-                durationMin={plan.returnLeg.durationMin}
-                costUsd={plan.returnLeg.costUsd}
-              />
-              <View style={styles.timelineRow}>
-                <View style={styles.gutter}>
-                  <StartPin size={30} />
-                </View>
-                <Text style={styles.anchorText}>Home by {formatTime(plan.homeMin)}</Text>
+          {/* Horizontal pager: one page per objective, all rendered from the
+              cache. Swiping settles on a page and reports back to the bar. */}
+          <ScrollView
+            ref={pagerRef}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            contentOffset={{ x: goalIndex * width, y: 0 }}
+            onMomentumScrollEnd={(e) =>
+              onPagerSettled(e.nativeEvent.contentOffset.x)
+            }
+          >
+            {OBJECTIVES.map((o) => (
+              <View key={o.goal} style={{ width }}>
+                {renderTimeline(plans[o.goal])}
               </View>
-            </>
-          )}
-
-          {plan.warnings.length > 0 && (
-            <View style={styles.dayWarnings}>
-              {plan.warnings.map((w, i) => (
-                <View key={i} style={styles.warningRow}>
-                  <MaterialCommunityIcons
-                    name="alert-outline"
-                    size={12}
-                    color={colors.warning}
-                  />
-                  <Text style={styles.warningText}>{w}</Text>
-                </View>
-              ))}
-            </View>
-          )}
+            ))}
+          </ScrollView>
         </BottomSheetScrollView>
       </BottomSheet>
     </View>
   );
 }
 
-function ToggleSeg({
+/**
+ * One segment of the objective bar. Carries its own day total and travel
+ * time so the four are comparable without switching between them
+ * (ui-guide §5: never show an optimised result without its numbers).
+ *
+ * No clay here. The accent belongs to the screen's primary action, and a
+ * selected segment is a state, not an action (ui-guide §1.3).
+ */
+function ObjectiveSeg({
   icon,
   label,
+  total,
+  duration,
   active,
   onPress,
 }: {
-  icon: 'scale-balance' | 'lightning-bolt';
+  icon: 'piggy-bank-outline' | 'scale-balance' | 'lightning-bolt' | 'seat-passenger';
   label: string;
+  total: string;
+  duration: string;
   active: boolean;
   onPress: () => void;
 }) {
   return (
     <Pressable
       onPress={onPress}
-      style={[styles.toggleSeg, active && styles.toggleSegActive]}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      accessibilityLabel={`${label}, ${total}, ${duration} travelling`}
+      style={[styles.objectiveSeg, active && styles.objectiveSegActive]}
     >
       <MaterialCommunityIcons
         name={icon}
-        size={14}
+        size={15}
         color={active ? colors.textPrimary : colors.textSecondary}
       />
-      <Text style={[styles.toggleText, active && styles.toggleTextActive]}>{label}</Text>
+      {/*
+        Stacked rather than laid out in a row: a quarter of a phone is not
+        wide enough for an icon and "Least Walking" side by side, and the
+        label is not shortenable — it names what the optimiser does, and the
+        short forms all overclaim.
+      */}
+      <Text
+        style={[styles.objectiveLabel, active && styles.objectiveLabelActive]}
+        numberOfLines={2}
+      >
+        {label}
+      </Text>
+      <Text
+        style={[styles.objectiveMeta, active && styles.objectiveMetaActive]}
+        numberOfLines={1}
+      >
+        {total}
+      </Text>
+      <Text style={styles.objectiveMeta} numberOfLines={1}>
+        {duration}
+      </Text>
     </Pressable>
   );
 }
@@ -471,52 +569,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   loadingBackText: { fontSize: 13, fontWeight: '500', color: colors.textSecondary },
-  ask: {
-    flex: 1,
-    backgroundColor: colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 32,
-    gap: 10,
-  },
-  askTitle: { fontSize: 17, fontWeight: '500', color: colors.textPrimary },
-  askBody: {
-    fontSize: 13,
-    lineHeight: 19,
-    color: colors.textSecondary,
-    textAlign: 'center',
-  },
-  askRow: { flexDirection: 'row', gap: 10, marginTop: 6 },
-  askBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 7,
-    paddingHorizontal: 18,
-    paddingVertical: 11,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
-    backgroundColor: colors.surface,
-  },
-  askBtnPressed: { backgroundColor: colors.surfaceAlt },
-  askBtnText: { fontSize: 14, fontWeight: '500', color: colors.textPrimary },
-  contextRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-    marginTop: 1,
-  },
-  carChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: colors.surfaceInput,
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  carChipText: { fontSize: 11, fontWeight: '500', color: colors.textSecondary },
   backChip: {
     position: 'absolute',
     left: 16,
@@ -565,35 +617,45 @@ const styles = StyleSheet.create({
   sheetHeaderText: {},
   sheetTitle: { fontSize: 17, fontWeight: '500', color: colors.textPrimary },
   sheetContext: { fontSize: 12, color: colors.textMuted, marginTop: 1 },
-  toggleRow: {
+  /**
+   * Objective bar. Same segmented-control language as the old two-way
+   * toggle (ui-guide §5): surfaceInput track, white active segment, subtle
+   * shadow. Four labels do not fit a fixed row on a narrow phone, so the
+   * track scrolls horizontally rather than truncating.
+   */
+  objectiveBar: {
     flexDirection: 'row',
     backgroundColor: colors.surfaceInput,
     borderRadius: 12,
     padding: 3,
+    gap: 3,
   },
-  toggleSeg: {
+  objectiveSeg: {
     flex: 1,
-    flexDirection: 'row',
+    minWidth: 0,
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 5,
+    paddingHorizontal: 2,
     paddingVertical: 7,
     borderRadius: 9,
+    gap: 1,
   },
-  toggleSegActive: {
+  objectiveSegActive: {
     backgroundColor: colors.surface,
     shadowColor: '#000',
     shadowOpacity: 0.08,
     shadowRadius: 2,
     shadowOffset: { width: 0, height: 1 },
   },
-  toggleText: { fontSize: 13, fontWeight: '500', color: colors.textSecondary },
-  toggleTextActive: { color: colors.textPrimary },
-  tradeoff: {
-    fontSize: 12,
-    color: colors.textMuted,
+  objectiveLabel: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: colors.textSecondary,
     textAlign: 'center',
+    lineHeight: 14,
   },
+  objectiveLabelActive: { color: colors.textPrimary },
+  objectiveMeta: { fontSize: 10, color: colors.textMuted, textAlign: 'center' },
+  objectiveMetaActive: { color: colors.textSecondary },
   cellsRow: { flexDirection: 'row', gap: 8 },
   cell: {
     flex: 1,
@@ -640,6 +702,15 @@ const styles = StyleSheet.create({
   stopName: { fontSize: 14, fontWeight: '500', color: colors.textPrimary },
   stopCost: { fontSize: 11, color: colors.textMuted, marginTop: 2 },
   stopTime: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  stopTail: { alignItems: 'flex-end', gap: 6 },
+  removeStop: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceInput,
+  },
   warningRow: {
     flexDirection: 'row',
     alignItems: 'center',
