@@ -1,7 +1,8 @@
 # Product Requirements Document: TripCircle (working name)
 **A banner-free planner for any day out — local or away — with anchor-based route optimization and a cloneable trip community**
 
-Version 0.2 — Draft | July 2026
+Version 0.3 — Draft | August 2026
+Changelog v0.3: **F6 is built, and arranging decorates the day rather than replacing it (§3.4).** The first build swapped the timeline for a tidy list of uniform rows, because uniform rows make the drag arithmetic trivial. It was the wrong trade: the day collapsed upward as the mode opened, and a day that rearranges itself the moment you ask to rearrange it has already lost the thread. iOS never substitutes a list for edit mode — icons keep their grid and the wobble is drawn over what is already there. Arranging now renders the timeline itself, legs and times and warnings intact, and the grip stands in the box the row's own controls already occupied. **Holding a stop is the only way in and the Order button is gone**, which is what makes the haptic on landing part of the feature rather than a flourish: an invisible gesture that also gives no answer is one nobody can confirm they performed. A stored order still has to be visible somewhere, so it moved to a "Your order" marker beside the day window — deliberately not a control, since a second door there would be the button back under another name. §14 corrected: F6 moves from Phase 2 to the MVP, and the objective count from two to four.
 Changelog v0.2: repositioned around "any day out" (local day trips + travel); added start-place/anchor model with privacy-by-design (landmark-first, coarse storage, ephemeral mode); replaced manual transport modes with Balanced/Fastest optimization goals; added planning-first design principles; category color system; city-by-city go-to-market and growth loops; legal & compliance section.
 
 ---
@@ -86,6 +87,7 @@ The optimizer turns anchor + selected places + constraints into a routed plan.
 ### 3.4 Manual planning
 - Full manual mode: drag places onto days, set times, add custom stops, notes, and reservation details.
 - Optimizer available as an on-demand assist ("optimize this day") rather than all-or-nothing.
+- **Drag-to-reorder is built (F6).** A hand-set order switches off construction, 2-opt and every repair pass — each of those exists to choose an order, and choosing one is what the user has just done — while scheduling, transport choice and the departure still run, because they arranged the stops rather than the buses. **Warnings carry more weight in this mode than anywhere else**, since nothing is repairing them: a stop moved earlier can produce a long wait, an arrival after closing, or a stop that will not fit, and those are reported plainly rather than quietly corrected. That is the point of respecting the order at all. **Auto** discards the arrangement and hands the sequencing back.
 
 ### 3.5 Local day trips ("plan my Saturday")
 - Home-anchored single-day planning with near-me discovery, theme chips, and live open-hours status ("Open now," "Open til 22:00").
@@ -150,7 +152,7 @@ Themes drive: (1) theme-aware optimization rules, (2) feed discovery filters ("f
 | F3 | Optimizer returns a routed plan in ≤10s for ≤40 places, round trip from anchor | P0 |
 | F4 | Per-leg transport auto-selection under Balanced and Fastest goals, with live toggle and visible tradeoff | P0 |
 | F5 | Optimizer respects opening hours, budget cap, day window ("home by") | P0 |
-| F6 | Manual drag-and-drop editing with automatic re-flow | P0 |
+| F6 | Manual drag-and-drop editing with automatic re-flow. Arranging is an explicit mode, entered by **holding a stop for 800ms and nothing else**; while it is open the objective pager and the sheet's content panning stop listening, so the drag is the only thing competing for the finger. **Entering the mode must not move the day**: the timeline is decorated in place rather than replaced by a list of uniform rows, and a hand-set order is authority — the optimiser schedules and picks transport around it but no longer reorders — with Auto handing the ordering back (§3.4) | P0 |
 | F7 | Local day-trip mode: near-me discovery, open-now status, Plan day, Start day | P0 |
 | F8 | Shared wishlists: multi-user boards with add/vote/comment, independent of trips | P0 |
 | F9 | Pull places from any wishlist into a plan | P0 |
@@ -312,7 +314,7 @@ The design mitigations above shrink exposure and shorten counsel conversations; 
 
 ## 14. Release plan
 
-- **MVP (Months 0–4):** anchor input, save places, optimizer (Balanced/Fastest, per-leg transport), local day-trip mode (Plan day/Start day), manual editing, export. Single launch city.
-- **Phase 2 (Months 4–8):** shared wishlists, link-only plan sharing, clone loop, creator seeding, cost splitting.
+- **MVP (Months 0–4):** anchor input, save places, optimizer (four objectives — Economic, Balanced, Fastest, Least Walking — with per-leg transport), local day-trip mode (Plan day/Start day), the diary loop, and manual reordering. Single launch city (San Francisco Bay Area). **F6 shipped in the MVP rather than Phase 2**, because a planner the user cannot overrule is not one they can trust. Export is not yet built.
+- **Phase 2 (Months 4–8):** the rest of manual editing (§3.4) — custom stops, manual times, reservation details, optional user-entered spend per stop. Drag-to-reorder is no longer among them. Then shared wishlists, link-only plan sharing, clone loop, creator seeding, cost splitting, export.
 - **Phase 3 (Months 8–12):** public feed with theme/city discovery, profiles + travel passport, comments, media posts, real-time collaboration.
 - **Phase 4 (12+):** multi-stay trips, TikTok/Instagram import, offline maps, AI conversational planning, affiliates at scale, city expansion.
