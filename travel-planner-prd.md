@@ -2,7 +2,7 @@
 **A banner-free planner for any day out — local or away — with anchor-based route optimization and a cloneable trip community**
 
 Version 0.3 — Draft | August 2026
-Changelog v0.3: **F6 is built, and arranging decorates the day rather than replacing it (§3.4).** The first build swapped the timeline for a tidy list of uniform rows, because uniform rows make the drag arithmetic trivial. It was the wrong trade: the day collapsed upward as the mode opened, and a day that rearranges itself the moment you ask to rearrange it has already lost the thread. iOS never substitutes a list for edit mode — icons keep their grid and the wobble is drawn over what is already there. Arranging now renders the timeline itself, legs and times and warnings intact, and the grip stands in the box the row's own controls already occupied. **Holding a stop is the only way in and the Order button is gone**, which is what makes the haptic on landing part of the feature rather than a flourish: an invisible gesture that also gives no answer is one nobody can confirm they performed. A stored order still has to be visible somewhere, so it moved to a "Your order" marker beside the day window — deliberately not a control, since a second door there would be the button back under another name. §14 corrected: F6 moves from Phase 2 to the MVP, and the objective count from two to four. **Two currency and objective-count leaks fixed throughout.** The document still described two goals (Balanced and Fastest) where the build has had four since the objective bar shipped, and still priced examples in yen — a currency this product has never used in any branch, carried since v0.2 when the launch city was undecided. §3.3 now lists all four with the Least Walking naming discipline attached, and every worked example is in US dollars. The v0.2 changelog line above keeps its original wording: it records what that revision did, and correcting it would falsify the history rather than the specification. §13's cost-ceiling question is kept but annotated, since it cuts against §3.3's decision that cost is reported and never enforced.
+Changelog v0.3: **F6 is built, and arranging decorates the day rather than replacing it (§3.4).** The first build swapped the timeline for a tidy list of uniform rows, because uniform rows make the drag arithmetic trivial. It was the wrong trade: the day collapsed upward as the mode opened, and a day that rearranges itself the moment you ask to rearrange it has already lost the thread. iOS never substitutes a list for edit mode — icons keep their grid and the wobble is drawn over what is already there. Arranging now renders the timeline itself, legs and times and warnings intact, and the grip stands in the box the row's own controls already occupied. **Holding a stop is the only way in and the Order button is gone**, which is what makes the haptic on landing part of the feature rather than a flourish: an invisible gesture that also gives no answer is one nobody can confirm they performed. A stored order still has to be visible somewhere, so it moved to a "Your order" marker beside the day window — deliberately not a control, since a second door there would be the button back under another name. §14 corrected: F6 moves from Phase 2 to the MVP, and the objective count from two to four. **Two currency and objective-count leaks fixed throughout.** The document still described two goals (Balanced and Fastest) where the build has had four since the objective bar shipped, and still priced examples in yen — a currency this product has never used in any branch, carried since v0.2 when the launch city was undecided. §3.3 now lists all four with the Least Walking naming discipline attached, and every worked example is in US dollars. The v0.2 changelog line above keeps its original wording: it records what that revision did, and correcting it would falsify the history rather than the specification. §13's cost-ceiling question is kept but annotated, since it cuts against §3.3's decision that cost is reported and never enforced. **The budget cap is struck from the specification for the same reason** — it was removed from the code in `7975e6c` and the document had gone on listing it as an optimiser input (§3.3), a P0 requirement (F5) and a solver constraint (§12), which is the most misleading kind of drift: a stated constraint nobody implements. §3.3 now says outright that there is no cap and why. Note that `7975e6c` claims alignment with a **PRD v0.4** that this branch's document never reached, which is where much of the drift corrected in this revision came from.
 Changelog v0.2: repositioned around "any day out" (local day trips + travel); added start-place/anchor model with privacy-by-design (landmark-first, coarse storage, ephemeral mode); replaced manual transport modes with Balanced/Fastest optimization goals; added planning-first design principles; category color system; city-by-city go-to-market and growth loops; legal & compliance section.
 
 ---
@@ -10,7 +10,7 @@ Changelog v0.2: repositioned around "any day out" (local day trips + travel); ad
 ## 1. Overview
 
 ### 1.1 Vision
-TripCircle plans any day out. Users set one start place — a landmark near home for a local day, or their hotel/Airbnb when traveling — save the places they want to go, and the app builds the most time- and budget-efficient route from that anchor and back, choosing the best transport for each leg. Finished plans become shareable, cloneable posts, so one person's Saturday food crawl or 3-day Kyoto itinerary becomes another person's starting template.
+TripCircle plans any day out. Users set one start place — a landmark near home for a local day, or their hotel/Airbnb when traveling — save the places they want to go, and the app builds the most time- and cost-efficient route from that anchor and back, choosing the best transport for each leg. Finished plans become shareable, cloneable posts, so one person's Saturday food crawl or 3-day Kyoto itinerary becomes another person's starting template.
 
 Positioning in one line: **"Strava for any day out — the plan is the activity."** Tool-first, social-second: the planner is fully useful solo; the community compounds on top.
 
@@ -74,7 +74,9 @@ Positioning in one line: **"Strava for any day out — the plan is the activity.
 ### 3.3 Route optimization (key differentiator)
 The optimizer turns anchor + selected places + constraints into a routed plan.
 
-**Inputs:** anchor address, selected places, date and day window (start/leave time, "home by" time), budget cap, must-visit flags, opening hours, meal windows.
+**Inputs:** anchor address, selected places, date and day window (start/leave time, "home by" time), must-visit flags, opening hours, meal windows.
+
+**There is deliberately no budget cap, and this is a decision rather than an omission.** An earlier build took a `budgetCapUsd` and ran a repair stage that downgraded legs until the day fitted a ceiling; both were removed in commit `7975e6c`. The reasoning is that transport is a small share of what a day costs once meals and admissions are counted, so a cap on fares constrains the wrong number while reading to the user as though it governs their spending. Cost is reported at every level — per leg, per stop as a price band, and as a day total — and enforced nowhere. A user who wants a cheap day picks Economic, which is what that objective is for.
 
 **Optimization goals (user picks one, can switch live):** four, ordered as a spectrum on money against time, with the fourth on a different axis entirely.
 1. **Economic** — leans hardest on the cheapest leg that will do, and accepts a slower day for it.
@@ -109,9 +111,9 @@ The optimizer turns anchor + selected places + constraints into a routed plan.
 - Road trips (route-based; anchor is the overnight stop per day)
 
 **By theme (first-class categories, per trip or per day):**
-- **Food** — meal-window scheduling (breakfast/lunch/snack/dinner slots), caps meals per day, balances price levels against budget
+- **Food** — meal-window scheduling (breakfast/lunch/snack/dinner slots), caps meals per day, spreads price bands across the day rather than stacking the expensive ones
 - **Ancient / historical & cultural** — weights opening hours, entry fees, guided-tour time blocks
-- **Shopping / malls** — clusters by district, respects mall hours; optional spending budget separate from trip budget
+- **Shopping / malls** — clusters by district, respects mall hours
 - Nature and outdoor, nightlife, art and architecture, café hopping, theme parks (extensible category system)
 
 Themes drive: (1) theme-aware optimization rules, (2) feed discovery filters ("food days in Tokyo"), (3) tailored suggestions while building. A single trip can mix themes by day.
@@ -155,7 +157,7 @@ Themes drive: (1) theme-aware optimization rules, (2) feed discovery filters ("f
 | F2 | Start-place entry (landmark-first suggestions, coarse storage, ephemeral GPS mode) as the only required planning input | P0 |
 | F3 | Optimizer returns a routed plan in ≤10s for ≤40 places, round trip from anchor | P0 |
 | F4 | Per-leg transport auto-selection under all four objectives (Economic, Balanced, Fastest, Least Walking), switchable live from a labelled bar, each showing its own fares, travel time and finish | P0 |
-| F5 | Optimizer respects opening hours, budget cap, day window ("home by") | P0 |
+| F5 | Optimizer respects opening hours and the day window ("home by"), and chooses the departure within that window rather than always leaving at its start. Cost is reported, never enforced — there is no budget cap (§3.3) | P0 |
 | F6 | Manual drag-and-drop editing with automatic re-flow. Arranging is an explicit mode, entered by **holding a stop for 800ms and nothing else**; while it is open the objective pager and the sheet's content panning stop listening, so the drag is the only thing competing for the finger. **Entering the mode must not move the day**: the timeline is decorated in place rather than replaced by a list of uniform rows, and a hand-set order is authority — the optimiser schedules and picks transport around it but no longer reorders — with Auto handing the ordering back (§3.4) | P0 |
 | F7 | Local day-trip mode: near-me discovery, open-now status, Plan day, Start day | P0 |
 | F8 | Shared wishlists: multi-user boards with add/vote/comment, independent of trips | P0 |
@@ -196,7 +198,7 @@ Every place category maps to one fixed color, used consistently across pins, tag
 ## 7. Technical considerations
 
 - **Maps & POI data:** Google Places API (rich, expensive) vs. Mapbox + Foursquare/OSM (cheaper, less coverage). POI + routing API costs are the #1 margin risk; cache aggressively and model unit economics early. Local day-trip usage multiplies API volume — plan for it.
-- **Routing/optimizer:** TSP with time windows + budget constraints + per-leg mode choice (multi-modal). Heuristic solvers (OR-Tools) sufficient; needs a transit/fares data source (e.g., Google Directions, local GTFS feeds) for accurate per-objective costs.
+- **Routing/optimizer:** TSP with time windows + per-leg mode choice (multi-modal), with cost as an objective weight rather than a constraint. Heuristic solvers (OR-Tools) sufficient; needs a transit/fares data source (e.g., Google Directions, local GTFS feeds) for accurate per-objective costs.
 - **Real-time sync:** CRDT layer (Yjs/Liveblocks) over WebSockets.
 - **Media:** transcoding + CDN; enforce compression and clip-length limits (e.g., 60s).
 - **Moderation & safety:** UGC reporting, blocking, automated moderation from day one; start-place privacy enforced at the API level (never serialized into shared posts).
