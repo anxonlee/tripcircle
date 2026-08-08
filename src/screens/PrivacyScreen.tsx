@@ -2,7 +2,6 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React from 'react';
 import {
-  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -21,19 +20,18 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Privacy'>;
  * In-app privacy summary (PRD §10, App Store Review Guideline 5.1.1).
  *
  * Apple requires a privacy policy link in App Store metadata AND inside the
- * app, and checks that the in-app one reaches a real webpage — so this
- * screen carries the substance in plain language and links out to the
- * canonical hosted policy rather than replacing it.
+ * app, and checks that the in-app one reaches a real webpage. TripCircle has
+ * no hosted page of its own yet, so for now this screen is the policy rather
+ * than a plain-language summary of one — see the note above the points.
  *
  * The claims here are deliberately specific ("read once, then discarded"
  * rather than "we respect your privacy"), because a vague policy is exactly
  * what §3A.6 is trying not to be.
  *
- * Keep this screen, the hosted policy at POLICY_URL, and the actual behaviour
- * in step: if one changes, all three change. `CCMFHK-economic` additionally
- * carries PRIVACY.md and docs/privacy/index.html, the source of the hosted
- * page; this branch has neither, so a change made here has to be carried
- * across rather than assumed to follow.
+ * Keep this screen and the actual behaviour in step: if one changes, so does
+ * the other. `CCMFHK-economic` carries PRIVACY.md and docs/privacy/index.html
+ * for PIRT, which is a different app with different data flows — treat them
+ * as a model for a TripCircle page, never as a description of this one.
  *
  * Two of the points below are computed rather than written down, because both
  * describe behaviour that varies by build:
@@ -48,11 +46,22 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Privacy'>;
  */
 
 /**
- * The canonical policy. Must stay reachable — App Review follows this link
- * and a dead URL is a 5.1.1 rejection. Hosted on Netlify; if the deployment
- * URL changes, update it here.
+ * There is deliberately no "read the full policy" link here yet.
+ *
+ * This screen used to open https://cool-starburst-afbe4b.netlify.app/, which
+ * is PIRT's policy: a different app, headed with PIRT's name, describing an
+ * app that has no Google integration at all. Sending a TripCircle tester
+ * there is worse than sending them nowhere, so until TripCircle has a page of
+ * its own this screen is the whole policy rather than a summary of one.
+ *
+ * BEFORE EXTERNAL TESTFLIGHT OR APP STORE SUBMISSION, the link has to come
+ * back. Guideline 5.1.1(i) wants a privacy policy reachable from inside the
+ * app as well as from App Store Connect, and Beta App Review applies it to
+ * external TestFlight builds. Internal testing skips that review, which is
+ * the only reason this is survivable now. What is needed is a hosted page
+ * describing what this file describes — both location readers, the Google
+ * seam when a key is configured, and Apple or Google maps by platform.
  */
-const POLICY_URL = 'https://cool-starburst-afbe4b.netlify.app/';
 
 type Point = { icon: string; title: string; body: string };
 
@@ -160,14 +169,6 @@ export function PrivacyScreen({ navigation }: Props) {
           everything, delete a visit or delete the app — there is nothing on our
           side to remove.
         </Text>
-
-        <Pressable
-          style={styles.link}
-          onPress={() => Linking.openURL(POLICY_URL)}
-        >
-          <Text style={styles.linkText}>Read the full policy</Text>
-          <MaterialCommunityIcons name="open-in-new" size={15} color={colors.accent} />
-        </Pressable>
       </ScrollView>
     </View>
   );
@@ -199,15 +200,4 @@ const styles = StyleSheet.create({
   rowTitle: { fontSize: 13, fontWeight: '500', color: colors.textPrimary },
   rowBody: { fontSize: 12, color: colors.textSecondary, lineHeight: 17 },
   rights: { fontSize: 12, color: colors.textMuted, lineHeight: 17 },
-  link: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    height: 44,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  linkText: { fontSize: 14, fontWeight: '500', color: colors.accent },
 });
