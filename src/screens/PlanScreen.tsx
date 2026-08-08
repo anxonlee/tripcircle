@@ -1,6 +1,8 @@
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import * as Haptics from 'expo-haptics';
+import { GestureDetector, type PanGesture } from 'react-native-gesture-handler';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
@@ -15,8 +17,8 @@ import {
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CategoryPin, PIN_ANCHOR, PinSlot, StartPin } from '../components/CategoryPin';
-import { DayOrderEditor } from '../components/DayOrderEditor';
 import { DayWindowControl } from '../components/DayWindowControl';
+import { ReorderableStack } from '../components/ReorderableStack';
 import { categoryIcon, transportIcon, transportLabel } from '../components/icons';
 import { TimelineNode } from '../components/IconTile';
 import type { CuratedPlace, TransportMode } from '../domain/types';
@@ -46,9 +48,39 @@ import { placesService } from '../services/places';
 import { routingService } from '../services/routing';
 import { useDiaryStore } from '../store/useDiaryStore';
 import { useTripStore, useUiStore } from '../store/useTripStore';
-import { categoryColors, colors, tint } from '../theme/colors';
+import { categoryColors, colors, pressedWell, tint } from '../theme/colors';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'DayPlan'>;
+
+/**
+ * How long a stop must be held to open arrange mode.
+ *
+ * A shade longer than the ~500ms iOS uses for the same gesture on the home
+ * screen, which is the length people's hands already know. Long enough that a
+ * thumb resting on a row while reading does not trip it; short enough that
+ * someone deliberately holding does not let go first.
+ *
+ * This is the only way into arrange mode, which is what makes the haptic on
+ * landing part of the feature rather than a flourish: an invisible gesture
+ * that also gives no answer is one nobody can confirm they performed.
+ */
+const ARRANGE_HOLD_MS = 800;
+
+/**
+ * The tap that says a hold has landed.
+ *
+ * Swallowing everything is deliberate and it covers two different cases: a
+ * device with no haptic engine, and a build made before the native module was
+ * added, where the call throws rather than rejects. Neither is worth a crash —
+ * the gesture still works, it just goes unremarked.
+ */
+function tapFeedback() {
+  try {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+  } catch {
+    // nothing to say
+  }
+}
 
 /**
  * The four objectives, in the order they appear in the bar and the pager.
@@ -95,6 +127,7 @@ export function PlanScreen({ navigation }: Props) {
   const dismissed = useUiStore((s) => s.dismissedPlaceIds);
   const dismissSuggestion = useUiStore((s) => s.dismissSuggestion);
   const visits = useDiaryStore((s) => s.visits);
+  const hydrated = useTripStore((s) => s.hydrated);
   const { width } = useWindowDimensions();
 
   const [allPlaces, setAllPlaces] = useState<CuratedPlace[]>([]);
@@ -102,7 +135,15 @@ export function PlanScreen({ navigation }: Props) {
   const [legOptionsFn, setLegOptionsFn] = useState<LegOptionsFn | null>(null);
   const mapRef = useRef<MapView>(null);
   const pagerRef = useRef<ScrollView>(null);
+  /**
+   * The sheet's scrollable, handed to the reorder handles so their drag can
+   * outrank it. Without this the scroll view claims a vertical pan the moment
+   * it starts and the row never moves.
+   */
+  const sheetScrollRef = useRef<any>(null);
   const [editing, setEditing] = useState(false);
+  /** Set once a hold has run its course, read when the finger comes off. */
+  const holdArmed = useRef(false);
 
   useEffect(() => {
     placesService.listPlaces().then((all) => {
@@ -139,7 +180,15 @@ export function PlanScreen({ navigation }: Props) {
    * together, so paying for all of them up front buys instant switching.
    */
   const plans = useMemo<Record<Goal, DayPlan> | null>(() => {
-    if (!startPlace || !legOptionsFn || orderedPlaces.length === 0) return null;
+    /*
+     * Nothing is solved until storage has answered. `dayOrder` decides
+     * whether the optimiser may reorder at all, and it arrives a beat after
+     * the first render — solving before it lands showed a hand-arranged day
+     * in the optimiser's order, which then jumped to the user's once the
+     * saved arrangement caught up.
+     */
+    if (!hydrated || !startPlace || !legOptionsFn || orderedPlaces.length === 0)
+      return null;
     const base = {
       startPlace,
       places: orderedPlaces,
@@ -156,7 +205,15 @@ export function PlanScreen({ navigation }: Props) {
       fastest: optimizeDay({ ...base, goal: 'fastest' }),
       leastWalking: optimizeDay({ ...base, goal: 'leastWalking' }),
     };
-  }, [startPlace, orderedPlaces, legOptionsFn, dayStartMin, homeByMin, dayOrder]);
+  }, [
+    hydrated,
+    startPlace,
+    orderedPlaces,
+    legOptionsFn,
+    dayStartMin,
+    homeByMin,
+    dayOrder,
+  ]);
 
   const plan = plans?.[goal] ?? null;
   const goalIndex = OBJECTIVES.findIndex((o) => o.goal === goal);
@@ -296,19 +353,20 @@ export function PlanScreen({ navigation }: Props) {
    * One objective's timeline. Rendered four times into the pager, so it takes
    * the plan rather than reading the selected one.
    */
-  const renderTimeline = (p: DayPlan) => (
-    <>
-      <View style={styles.timelineRow}>
-        <View style={styles.gutter}>
-          <StartPin size={30} />
-        </View>
-        <Text style={styles.anchorText}>Leave {formatTime(p.dayStartMin)}</Text>
-      </View>
-
-      {p.stops.map((s) => (
-        <View key={s.place.id}>
-          <LegRow mode={s.leg.mode} durationMin={s.leg.durationMin} costUsd={s.leg.costUsd} />
+  const renderTimeline = (p: DayPlan, arranging = false) => {
+    /**
+     * One stop and the leg that reaches it, as the timeline always drew them.
+     *
+     * Arranging renders exactly this — the same rows, at the same heights,
+     * carrying the same warnings. The only differences are the ones that cost
+     * no layout: the block wobbles, a grip stands in the tail's control box,
+     * and the controls that would compete for a tap are switched off.
+     */
+    const stopBlock = (s: DayPlan['stops'][number], drag?: PanGesture) => (
+      <>
+        <LegRow mode={s.leg.mode} durationMin={s.leg.durationMin} costUsd={s.leg.costUsd} />
           <Pressable
+            disabled={arranging}
             onPress={() => {
               setHighlighted(s.place.id);
               mapRef.current?.animateToRegion(
@@ -316,12 +374,44 @@ export function PlanScreen({ navigation }: Props) {
                 200
               );
             }}
-            // The gesture people already know from rearranging apps.
-            onLongPress={() => setEditing(true)}
-            delayLongPress={400}
-            style={[
+            /*
+             * The gesture people already know from rearranging apps, but the
+             * mode opens on the lift rather than on the hold.
+             *
+             * Opening it under a live finger moved the sheet: entering the
+             * mode locks the sheet's content panning, and taking that
+             * recogniser away mid-touch left an in-flight gesture to settle
+             * itself, which it did by jumping to the next snap point. Waiting
+             * for the finger costs nothing — the hold is over by then — and
+             * the sheet stays exactly where it was put.
+             */
+            onLongPress={() => {
+              holdArmed.current = true;
+              /*
+               * The mode opens on the lift, so without this the hold has no
+               * moment — the finger is down for 800ms and the screen says
+               * nothing. The tap answers at the instant the hold lands, which
+               * is the whole reason iOS can get away with a silent gesture.
+               */
+              tapFeedback();
+            }}
+            onPressOut={() => {
+              if (!holdArmed.current) return;
+              holdArmed.current = false;
+              setEditing(true);
+            }}
+            delayLongPress={ARRANGE_HOLD_MS}
+            /*
+             * Darkens under the finger, the way a list row does on iOS. It
+             * earns its place here more than it would on an ordinary button:
+             * the hold runs for most of a second before it does anything, and
+             * a row that stays inert for that long reads as a row that missed
+             * the touch.
+             */
+            style={({ pressed }) => [
               styles.timelineRow,
               highlightedId === s.place.id && styles.stopHighlighted,
+              pressed && styles.stopPressed,
             ]}
           >
             <View style={styles.gutter}>
@@ -349,40 +439,83 @@ export function PlanScreen({ navigation }: Props) {
             </View>
             <View style={styles.stopTail}>
               <Text style={styles.stopTime}>{formatTime(s.arriveMin)}</Text>
-              <View style={styles.stopActions}>
-                <Pressable
-                  onPress={() =>
-                    Linking.openURL(googleMapsStopUrl(s.place.location, s.leg.mode))
-                  }
-                  hitSlop={10}
-                  style={styles.stopAction}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Directions to ${s.place.name} in Google Maps`}
-                >
-                  <MaterialCommunityIcons
-                    name="navigation-variant-outline"
-                    size={14}
-                    color={colors.textSecondary}
-                  />
-                </Pressable>
-                <Pressable
-                  onPress={() => removeStop(s.place.id, s.place.name)}
-                  hitSlop={10}
-                  style={styles.stopAction}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Remove ${s.place.name} from the day`}
-                >
-                  <MaterialCommunityIcons
-                    name="close"
-                    size={14}
-                    color={colors.textMuted}
-                  />
-                </Pressable>
-              </View>
+              {/*
+                The grip stands in the box the row's own controls already
+                occupied rather than taking one of its own. Same 44pt square,
+                so the row keeps its height to the pixel as the mode opens —
+                the way a home screen icon keeps its grid square when the
+                remove badge appears on it. Neither navigating to a stop nor
+                removing one is something to be doing mid-arrange anyway.
+              */}
+              {drag ? (
+                <GestureDetector gesture={drag}>
+                  <View style={styles.tailControl}>
+                    <MaterialCommunityIcons
+                      name="drag"
+                      size={26}
+                      color={colors.textSecondary}
+                    />
+                  </View>
+                </GestureDetector>
+              ) : (
+                <View style={styles.tailControl}>
+                  <Pressable
+                    onPress={() =>
+                      Linking.openURL(googleMapsStopUrl(s.place.location, s.leg.mode))
+                    }
+                    hitSlop={8}
+                    style={styles.stopAction}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Directions to ${s.place.name} in Google Maps`}
+                  >
+                    <MaterialCommunityIcons
+                      name="navigation-variant-outline"
+                      size={14}
+                      color={colors.textSecondary}
+                    />
+                  </Pressable>
+                  <Pressable
+                    onPress={() => removeStop(s.place.id, s.place.name)}
+                    hitSlop={8}
+                    style={styles.stopAction}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Remove ${s.place.name} from the day`}
+                  >
+                    <MaterialCommunityIcons
+                      name="close"
+                      size={14}
+                      color={colors.textMuted}
+                    />
+                  </Pressable>
+                </View>
+              )}
             </View>
           </Pressable>
+        </>
+    );
+
+    return (
+    <>
+      <View style={styles.timelineRow}>
+        <View style={styles.gutter}>
+          <StartPin size={30} />
         </View>
-      ))}
+        <Text style={styles.anchorText}>Leave {formatTime(p.dayStartMin)}</Text>
+      </View>
+
+      {arranging ? (
+        <ReorderableStack
+          ids={p.stops.map((s) => s.place.id)}
+          onReorder={setDayOrder}
+          scrollRef={sheetScrollRef}
+          renderItem={(id, drag) => {
+            const s = p.stops.find((x) => x.place.id === id);
+            return s ? stopBlock(s, drag) : null;
+          }}
+        />
+      ) : (
+        p.stops.map((s) => <View key={s.place.id}>{stopBlock(s)}</View>)
+      )}
 
       {p.returnLeg && (
         <>
@@ -415,7 +548,8 @@ export function PlanScreen({ navigation }: Props) {
         </View>
       )}
     </>
-  );
+    );
+  };
 
   if (!startPlace || selectedIds.length < 2) {
     return (
@@ -505,10 +639,19 @@ export function PlanScreen({ navigation }: Props) {
         // Bounding the travel is the fix rather than padding the header,
         // which would leave a white gap at every other snap point.
         topInset={insets.top}
-        // While arranging, the sheet stops listening for pans. A drag that
-        // the sheet also claims is a drag that moves the sheet instead of
-        // the stop.
+        /*
+         * While arranging, the sheet moves by its grabber and not by its
+         * content.
+         *
+         * Unlocking content panning altogether was tried and lost the row
+         * drag: a vertical pan starting on a row handle was claimed by the
+         * sheet, so the sheet slid up and the row never moved. Splitting the
+         * two gestures by *where* they start settles it — the grabber is the
+         * sheet's, everything below it belongs to the list — and the sheet
+         * stays movable while the day is being arranged, which is the point.
+         */
         enableContentPanningGesture={!editing}
+        enableHandlePanningGesture
         backgroundStyle={styles.sheet}
         handleIndicatorStyle={styles.handle}
       >
@@ -516,10 +659,30 @@ export function PlanScreen({ navigation }: Props) {
           <View style={styles.sheetHeaderText}>
             <Text style={styles.sheetTitle}>Day plan</Text>
             <Text style={styles.sheetContext}>From {startPlace.name}</Text>
-            <DayWindowControl
-              window={{ dayStartMin, homeByMin }}
-              onChange={setDayWindow}
-            />
+            <View style={styles.windowRow}>
+              <DayWindowControl
+                window={{ dayStartMin, homeByMin }}
+                onChange={setDayWindow}
+              />
+              {/*
+                The Order button used to carry this by going orange. With the
+                button gone the fact still has to be somewhere: a stored order
+                means the optimiser is no longer sequencing the day, which is
+                why the times can be worse than they were. Deliberately not a
+                control — arranging is reached by holding a stop, and a second
+                door here would be the button back under another name.
+              */}
+              {dayOrder && (
+                <View style={styles.ownOrder}>
+                  <MaterialCommunityIcons
+                    name="sort"
+                    size={12}
+                    color={colors.accent}
+                  />
+                  <Text style={styles.ownOrderText}>Your order</Text>
+                </View>
+              )}
+            </View>
           </View>
           {/*
             Four objectives, four columns, all on screen. This was a
@@ -555,7 +718,55 @@ export function PlanScreen({ navigation }: Props) {
             hand-off used to be a chip pinned to the top corner, which put the
             day's two end-actions on opposite sides of the screen with no
             indication they were alternatives.
+
+            While arranging, the same strip carries Auto and Done instead.
+            Putting them here rather than above the list is what keeps the day
+            from sliding down the screen as the mode opens: the list starts at
+            the same place either way, and the stop under the finger stays
+            under it. Start day and Maps have nothing to act on mid-arrange
+            anyway, so nothing is lost by their standing down.
           */}
+          {editing ? (
+            <View style={styles.actionRow}>
+              <Pressable
+                style={styles.startBtn}
+                onPress={() => setEditing(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Finish arranging the day"
+              >
+                <MaterialCommunityIcons name="check" size={16} color="#FFFFFF" />
+                <Text style={styles.startBtnText}>Done</Text>
+              </Pressable>
+              {/*
+                §3.4: the optimiser becomes an on-demand assist rather than
+                all-or-nothing, and this is how it is asked back.
+              */}
+              <Pressable
+                style={styles.mapsBtn}
+                onPress={() => {
+                  clearDayOrder();
+                  setEditing(false);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Let the planner order the day again"
+              >
+                <MaterialCommunityIcons
+                  name="auto-fix"
+                  size={16}
+                  color={colors.textPrimary}
+                />
+                <Text style={styles.mapsBtnText}>Auto</Text>
+              </Pressable>
+              <View style={styles.arrangeNote}>
+                <MaterialCommunityIcons
+                  name="drag-horizontal-variant"
+                  size={16}
+                  color={colors.textMuted}
+                />
+                <Text style={styles.arrangeNoteText}>Drag to reorder</Text>
+              </View>
+            </View>
+          ) : (
           <View style={styles.actionRow}>
             <Pressable
               style={styles.startBtn}
@@ -579,50 +790,22 @@ export function PlanScreen({ navigation }: Props) {
               />
               <Text style={styles.mapsBtnText}>Maps</Text>
             </Pressable>
-            {/*
-              Long-pressing a stop also opens this, the way rearranging apps
-              does. The button exists because a gesture nobody is told about
-              is a gesture nobody finds (F6).
-            */}
-            <Pressable
-              style={styles.mapsBtn}
-              onPress={() => setEditing(true)}
-              accessibilityRole="button"
-              accessibilityLabel="Arrange the order of the day"
-            >
-              <MaterialCommunityIcons
-                name="sort"
-                size={16}
-                color={dayOrder ? colors.accent : colors.textPrimary}
-              />
-              <Text
-                style={[styles.mapsBtnText, dayOrder && { color: colors.accent }]}
-              >
-                Order
-              </Text>
-            </Pressable>
           </View>
+          )}
         </View>
 
         <BottomSheetScrollView
+          ref={sheetScrollRef}
           contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
         >
           {/*
-            Edit mode replaces the timeline rather than overlaying it, which
-            is what keeps the gestures from competing: while the editor is up
-            the pager is locked and there is only one recogniser listening
-            for a drag.
+            Arranging does not replace the timeline; it decorates it. The
+            pager stands down because a horizontal swipe and a vertical drag
+            cannot share a finger, so the selected objective is rendered on
+            its own — same width, same rows, same heights, nothing moved.
           */}
           {editing ? (
-            <DayOrderEditor
-              places={orderedPlaces}
-              onReorder={setDayOrder}
-              onDone={() => setEditing(false)}
-              onOptimise={() => {
-                clearDayOrder();
-                setEditing(false);
-              }}
-            />
+            <View style={{ width }}>{renderTimeline(plan, true)}</View>
           ) : (
             /* Horizontal pager: one page per objective, all rendered from the
                cache. Swiping settles on a page and reports back to the bar. */
@@ -630,7 +813,6 @@ export function PlanScreen({ navigation }: Props) {
               ref={pagerRef}
               horizontal
               pagingEnabled
-              scrollEnabled={!editing}
               showsHorizontalScrollIndicator={false}
               contentOffset={{ x: goalIndex * width, y: 0 }}
               onMomentumScrollEnd={(e) =>
@@ -936,6 +1118,31 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceAlt,
   },
   mapsBtnText: { fontSize: 14, fontWeight: '500', color: colors.textPrimary },
+  /**
+   * Not a button. It fills what Maps and Start day leave behind so the strip
+   * keeps its width, and says what the grips are for — the instruction used
+   * to sit above the list, where it pushed the day down the screen.
+   */
+  arrangeNote: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    height: 44,
+  },
+  arrangeNoteText: { fontSize: 12, color: colors.textMuted },
+  windowRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  ownOrder: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 9,
+    backgroundColor: tint(colors.accent),
+  },
+  ownOrderText: { fontSize: 12, fontWeight: '500', color: colors.accent },
   suggestBlock: {
     marginHorizontal: 16,
     marginTop: 8,
@@ -1017,12 +1224,54 @@ const styles = StyleSheet.create({
   },
   legText: { fontSize: 11, color: colors.textSecondary },
   stopHighlighted: { backgroundColor: colors.surfaceAlt },
+  /**
+   * A rounded slab under the finger, held clear of the screen edges so the
+   * corners are visible as corners — the shape iOS gives a pressed row, and
+   * the shape of the app icons the gesture is borrowed from.
+   *
+   * The inset is paid for out of the row's own padding: 8 of margin plus 8 of
+   * padding is the 16 the row already had, so the slab appears around the
+   * content without moving a pixel of it. Adding margin alone would shove
+   * every stop sideways on touch, which is the movement this screen has spent
+   * a long time getting rid of.
+   */
+  stopPressed: {
+    backgroundColor: pressedWell,
+    marginHorizontal: 8,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+  },
   stopBody: { flex: 1 },
   stopName: { fontSize: 14, fontWeight: '500', color: colors.textPrimary },
   stopCost: { fontSize: 11, color: colors.textMuted, marginTop: 2 },
   stopTime: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
-  stopTail: { alignItems: 'flex-end', gap: 6 },
-  stopActions: { flexDirection: 'row', gap: 6 },
+  /**
+   * Arrival time and the row's controls, side by side.
+   *
+   * They were stacked, which put the time directly above a grip you were
+   * about to put a thumb on. Alongside, the time stays readable while the row
+   * is being moved, and the tail is one control's height rather than two
+   * things' worth.
+   */
+  stopTail: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  /**
+   * The box the row's controls sit in, and the box the grip stands in.
+   *
+   * Deliberately the same for each, and deliberately larger than what it
+   * holds. Same, because a tail that changed height between the two modes
+   * would move every row below it the moment arranging opened — which is the
+   * one thing this mode must not do. Larger, because 44pt is the smallest
+   * thing a thumb hits reliably and this one sits at the screen edge, where
+   * thumbs are least accurate.
+   */
+  tailControl: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 44,
+    height: 44,
+    gap: 6,
+  },
   stopAction: {
     width: 22,
     height: 22,
