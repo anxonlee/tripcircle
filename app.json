@@ -35,6 +35,12 @@
           "backgroundColor": "#FFFFFF"
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "244cb632-aeba-43ac-a866-f88509fd47cc"
+      }
+    },
+    "owner": "anxonlee"
   }
 }
