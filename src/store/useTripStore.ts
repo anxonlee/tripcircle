@@ -91,6 +91,20 @@ interface TripState {
   dayOrder: string[] | null;
   setDayOrder: (ids: string[]) => void;
   clearDayOrder: () => void;
+  /**
+   * Whether AsyncStorage has answered yet.
+   *
+   * Zustand's persist middleware rehydrates asynchronously, so the first
+   * render of every screen sees the defaults rather than what the user saved.
+   * For most of this store that is invisible, but `dayOrder` decides whether
+   * the optimiser may reorder the day at all: for one frame after launch a
+   * hand-arranged day was solved as though it had never been arranged, so it
+   * rendered in the optimiser's order and then jumped to the user's. Screens
+   * that care wait for this.
+   *
+   * Never persisted — it describes this launch, not the user.
+   */
+  hydrated: boolean;
 }
 
 export const useTripStore = create<TripState>()(
@@ -124,6 +138,7 @@ export const useTripStore = create<TripState>()(
       dayOrder: null,
       setDayOrder: (ids) => set({ dayOrder: ids }),
       clearDayOrder: () => set({ dayOrder: null }),
+      hydrated: false,
     }),
     {
       name: 'tripcircle-trip',
@@ -140,6 +155,14 @@ export const useTripStore = create<TripState>()(
         startDayStep: s.startDayStep,
         dayOrder: s.dayOrder,
       }),
+      /**
+       * Fires once storage has answered, whether or not anything was stored.
+       * The flag has to be set even on failure, or a first run with nothing
+       * saved would wait for a rehydration that is never coming.
+       */
+      onRehydrateStorage: () => () => {
+        useTripStore.setState({ hydrated: true });
+      },
     }
   )
 );

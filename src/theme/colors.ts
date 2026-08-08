@@ -48,6 +48,18 @@ export const categoryLabels: Record<Category, string> = {
   cafe: 'Café',
 };
 
+/**
+ * What a row looks like with a finger on it.
+ *
+ * Guide §2 has no press state, and this deliberately does not add a hue to
+ * the palette: it is neutral black at low alpha, so it darkens whatever it
+ * covers rather than colouring it. That is what iOS does to a list row under
+ * a finger, and it is the only honest way to answer a hold — the gesture runs
+ * for the best part of a second, and a row that never acknowledges the touch
+ * reads as a row that did not receive it.
+ */
+export const pressedWell = 'rgba(0, 0, 0, 0.07)';
+
 /** ~14% tint over white for tile/tag backgrounds (guide §2 tint rule). */
 export function tint(hex: string): string {
   return `${hex}24`;
