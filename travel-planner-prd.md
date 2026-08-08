@@ -2,7 +2,7 @@
 **A banner-free planner for any day out — local or away — with anchor-based route optimization and a cloneable trip community**
 
 Version 0.3 — Draft | August 2026
-Changelog v0.3: **F6 is built, and arranging decorates the day rather than replacing it (§3.4).** The first build swapped the timeline for a tidy list of uniform rows, because uniform rows make the drag arithmetic trivial. It was the wrong trade: the day collapsed upward as the mode opened, and a day that rearranges itself the moment you ask to rearrange it has already lost the thread. iOS never substitutes a list for edit mode — icons keep their grid and the wobble is drawn over what is already there. Arranging now renders the timeline itself, legs and times and warnings intact, and the grip stands in the box the row's own controls already occupied. **Holding a stop is the only way in and the Order button is gone**, which is what makes the haptic on landing part of the feature rather than a flourish: an invisible gesture that also gives no answer is one nobody can confirm they performed. A stored order still has to be visible somewhere, so it moved to a "Your order" marker beside the day window — deliberately not a control, since a second door there would be the button back under another name. §14 corrected: F6 moves from Phase 2 to the MVP, and the objective count from two to four.
+Changelog v0.3: **F6 is built, and arranging decorates the day rather than replacing it (§3.4).** The first build swapped the timeline for a tidy list of uniform rows, because uniform rows make the drag arithmetic trivial. It was the wrong trade: the day collapsed upward as the mode opened, and a day that rearranges itself the moment you ask to rearrange it has already lost the thread. iOS never substitutes a list for edit mode — icons keep their grid and the wobble is drawn over what is already there. Arranging now renders the timeline itself, legs and times and warnings intact, and the grip stands in the box the row's own controls already occupied. **Holding a stop is the only way in and the Order button is gone**, which is what makes the haptic on landing part of the feature rather than a flourish: an invisible gesture that also gives no answer is one nobody can confirm they performed. A stored order still has to be visible somewhere, so it moved to a "Your order" marker beside the day window — deliberately not a control, since a second door there would be the button back under another name. §14 corrected: F6 moves from Phase 2 to the MVP, and the objective count from two to four. **Two currency and objective-count leaks fixed throughout.** The document still described two goals (Balanced and Fastest) where the build has had four since the objective bar shipped, and still priced examples in yen — a currency this product has never used in any branch, carried since v0.2 when the launch city was undecided. §3.3 now lists all four with the Least Walking naming discipline attached, and every worked example is in US dollars. The v0.2 changelog line above keeps its original wording: it records what that revision did, and correcting it would falsify the history rather than the specification. §13's cost-ceiling question is kept but annotated, since it cuts against §3.3's decision that cost is reported and never enforced.
 Changelog v0.2: repositioned around "any day out" (local day trips + travel); added start-place/anchor model with privacy-by-design (landmark-first, coarse storage, ephemeral mode); replaced manual transport modes with Balanced/Fastest optimization goals; added planning-first design principles; category color system; city-by-city go-to-market and growth loops; legal & compliance section.
 
 ---
@@ -24,13 +24,13 @@ Positioning in one line: **"Strava for any day out — the plan is the activity.
 ### 1.3 Product principles
 1. **Planning-first, banner-free.** No ad strips, no upsell banners, no recommendation clutter on core screens. The map, the route, and the plan are the interface. Restraint is the differentiator.
 2. **One start place per day.** A start place (landmark near home, or the stay when traveling) is the single required input; every day is a round trip from it. Privacy by design: landmark-first, coarse storage, ephemeral GPS mode (§3.1).
-3. **The optimizer shows its reasoning.** Every generated plan displays what it saved and what it trades off ("saved 45 min," "¥1,340 · home by 17:00"). Trust comes from transparency, and plans are always human-editable.
+3. **The optimizer shows its reasoning.** Every generated plan displays what it saved and what it trades off ("saves 45 min of waiting," "$10 · home by 12:41"). Trust comes from transparency, and plans are always human-editable.
 4. **The plan is the post.** Sharing requires no extra content creation — the itinerary the user built is the shareable artifact.
 5. **Local and travel are the same product.** One engine, three frequencies: weekly local days out, occasional weekend getaways, and 2–3 big trips a year.
 
 ### 1.4 Goals
 1. Effortless capture of places into personal and shared wishlists.
-2. Anchor-based, transport-aware route optimization (Balanced or Fastest).
+2. Anchor-based, transport-aware route optimization across four objectives (Economic, Balanced, Fastest, Least Walking).
 3. High-frequency local use ("plan my Saturday") that sustains engagement between trips.
 4. A community layer where every plan is shareable, discoverable, and cloneable.
 
@@ -49,7 +49,7 @@ Positioning in one line: **"Strava for any day out — the plan is the activity.
 | The Local Explorer | Lives in a big city, plans weekend days out (food, culture, shopping) | "Plan my Saturday" from home, near-me discovery, open-hours awareness |
 | The Group Organizer | 24–38, plans trips and outings for friends/family | Shared wishlists, voting, cost splitting |
 | The Inspiration Collector | 18–30, saves travel/food content from TikTok and Instagram | Link import, save-to-map, wishlist organization |
-| The Efficient Traveler | 28–45, limited vacation days, budget-conscious | Anchor-based optimized itineraries, Balanced/Fastest control |
+| The Efficient Traveler | 28–45, limited vacation days, budget-conscious | Anchor-based optimized itineraries, four-objective control |
 | The Creator | Documents days out and trips, wants an audience | Rich cloneable posts, follower growth |
 
 ---
@@ -76,13 +76,17 @@ The optimizer turns anchor + selected places + constraints into a routed plan.
 
 **Inputs:** anchor address, selected places, date and day window (start/leave time, "home by" time), budget cap, must-visit flags, opening hours, meal windows.
 
-**Optimization goals (user picks one, can toggle live):**
-1. **Balanced** (default) — best blend of total cost and total time; prefers walking/transit where reasonable.
-2. **Fastest** — minimizes total travel time regardless of cost; upgrades legs to taxis/rapid transit where it saves meaningful time.
+**Optimization goals (user picks one, can switch live):** four, ordered as a spectrum on money against time, with the fourth on a different axis entirely.
+1. **Economic** — leans hardest on the cheapest leg that will do, and accepts a slower day for it.
+2. **Balanced** (default) — best blend of total cost and total time; prefers walking and transit where reasonable.
+3. **Fastest** — minimizes total travel time regardless of cost; upgrades legs to taxis or rapid transit where it saves meaningful time.
+4. **Least Walking** — penalises walking distance past a short free allowance, and will spend both money and time to avoid it.
 
-**Per-leg transport selection:** the app — not the user — chooses the transport for each leg (walk, bus, metro/train, taxi/rideshare, drive, bike) to satisfy the chosen goal. Each leg displays its mode, duration, and cost. Toggling Balanced ↔ Fastest re-plans instantly and shows the tradeoff (e.g., "40 min faster, ¥2,000 more").
+⚠️ **Naming discipline:** call the fourth one *Least Walking*. Do **not** label it accessible, step-free, or wheelchair-friendly. The model holds no accessibility data — no lift locations, no step-free exits, no low-floor vehicle information — so any of those labels would be a claim the software cannot support.
 
-**Outputs:** ordered route drawn on the map from the anchor and back; timeline with depart time, per-stop arrival times, per-leg transport chips, per-stop costs, day totals (cost, travel time, "home by"), and warnings ("closed Mondays," "over budget by ¥1,200"). Drag-and-drop overrides re-flow the rest of the day.
+**Per-leg transport selection:** the app — not the user — chooses the transport for each leg (walk, Muni, BART, ferry, taxi or rideshare, drive, bike) to satisfy the chosen goal. Each leg displays its mode, duration, and cost. All four objectives are solved once when the selection changes and held in a cache, so switching between them is instant rather than a re-plan, and each carries its own fares, travel time and finish for comparison.
+
+**Outputs:** ordered route drawn on the map from the anchor and back; timeline with depart time, per-stop arrival times, per-leg transport chips, per-stop price bands, day totals (fares, travel time, "home by"), and warnings — "closed Mondays", a long wait, an arrival after closing, a stop that will not fit, or the departure explaining itself ("leaving at 9:45 rather than 9:00, which saves 45 min of waiting for the same places and the same finish"). Costs are reported, never enforced. Drag-and-drop overrides re-flow the rest of the day.
 
 ### 3.4 Manual planning
 - Full manual mode: drag places onto days, set times, add custom stops, notes, and reservation details.
@@ -122,7 +126,7 @@ Themes drive: (1) theme-aware optimization rules, (2) feed discovery filters ("f
 - Publish any plan (local day or multi-day trip) as a post: cover media, timeline, photos/videos per stop, costs (optional), tips.
 - Feed: following, trending, and city/destination discovery with theme filters. Local density prioritized ("best food Saturdays in your city").
 - Interactions: like, comment, save, share externally.
-- **Clone**: one tap copies a shared plan into drafts with all places, re-anchored to the cloner's own home/stay and re-optimized for their dates, budget, and Balanced/Fastest preference. Clone counts are displayed on posts (social proof).
+- **Clone**: one tap copies a shared plan into drafts with all places, re-anchored to the cloner's own home/stay and re-optimized for their dates and their chosen objective. Clone counts are displayed on posts (social proof).
 - Privacy: private, link-only, followers, public. Anchor addresses never exposed; optional delayed posting so users don't reveal real-time location.
 
 ### 3.9 Supporting features
@@ -138,7 +142,7 @@ Themes drive: (1) theme-aware optimization rules, (2) feed discovery filters ("f
 ## 4. User flows (summary)
 
 1. **Local loop (weekly):** save spots over the week → Saturday morning, tap Plan day → routed day from home → Start day → optionally share → friends clone.
-2. **Travel loop:** shared wishlist fills over months → create trip, enter hotel address → select places → optimize (Balanced/Fastest) → adjust → travel with offline plan → publish → others clone.
+2. **Travel loop:** shared wishlist fills over months → create trip, enter hotel address → select places → optimize (pick one of the four objectives) → adjust → travel with offline plan → publish → others clone.
 3. **Clone loop:** discover a post (local or travel) → clone → re-anchored and re-optimized for own situation → go.
 
 ---
@@ -150,7 +154,7 @@ Themes drive: (1) theme-aware optimization rules, (2) feed discovery filters ("f
 | F1 | Save a place to a named list in ≤3 taps | P0 |
 | F2 | Start-place entry (landmark-first suggestions, coarse storage, ephemeral GPS mode) as the only required planning input | P0 |
 | F3 | Optimizer returns a routed plan in ≤10s for ≤40 places, round trip from anchor | P0 |
-| F4 | Per-leg transport auto-selection under Balanced and Fastest goals, with live toggle and visible tradeoff | P0 |
+| F4 | Per-leg transport auto-selection under all four objectives (Economic, Balanced, Fastest, Least Walking), switchable live from a labelled bar, each showing its own fares, travel time and finish | P0 |
 | F5 | Optimizer respects opening hours, budget cap, day window ("home by") | P0 |
 | F6 | Manual drag-and-drop editing with automatic re-flow. Arranging is an explicit mode, entered by **holding a stop for 800ms and nothing else**; while it is open the objective pager and the sheet's content panning stop listening, so the drag is the only thing competing for the finger. **Entering the mode must not move the day**: the timeline is decorated in place rather than replaced by a list of uniform rows, and a hand-set order is authority — the optimiser schedules and picks transport around it but no longer reorders — with Auto handing the ordering back (§3.4) | P0 |
 | F7 | Local day-trip mode: near-me discovery, open-now status, Plan day, Start day | P0 |
@@ -192,7 +196,7 @@ Every place category maps to one fixed color, used consistently across pins, tag
 ## 7. Technical considerations
 
 - **Maps & POI data:** Google Places API (rich, expensive) vs. Mapbox + Foursquare/OSM (cheaper, less coverage). POI + routing API costs are the #1 margin risk; cache aggressively and model unit economics early. Local day-trip usage multiplies API volume — plan for it.
-- **Routing/optimizer:** TSP with time windows + budget constraints + per-leg mode choice (multi-modal). Heuristic solvers (OR-Tools) sufficient; needs a transit/fares data source (e.g., Google Directions, local GTFS feeds) for accurate Balanced/Fastest costs.
+- **Routing/optimizer:** TSP with time windows + budget constraints + per-leg mode choice (multi-modal). Heuristic solvers (OR-Tools) sufficient; needs a transit/fares data source (e.g., Google Directions, local GTFS feeds) for accurate per-objective costs.
 - **Real-time sync:** CRDT layer (Yjs/Liveblocks) over WebSockets.
 - **Media:** transcoding + CDN; enforce compression and clip-length limits (e.g., 60s).
 - **Moderation & safety:** UGC reporting, blocking, automated moderation from day one; start-place privacy enforced at the API level (never serialized into shared posts).
@@ -306,8 +310,8 @@ The design mitigations above shrink exposure and shorten counsel conversations; 
 
 1. Which launch city? (Decision gate: creator availability, transit data quality, team familiarity.)
 2. Taxi/rideshare pricing data for Fastest mode — estimate from distance or integrate a provider API?
-3. Should Fastest mode have a user-set cost ceiling ("fastest under ¥5,000")?
-4. AI conversational planning ("plan me a food Saturday under ¥3,000") — v1 or fast-follow?
+3. Should Fastest mode have a user-set cost ceiling ("fastest under $50")? Note this cuts against §3.3's decision that cost is reported and never enforced, and that Economic is how a cheap day is asked for.
+4. AI conversational planning ("plan me a food Saturday under $30") — v1 or fast-follow?
 5. iOS-first native vs. cross-platform (React Native/Flutter)?
 
 ---
