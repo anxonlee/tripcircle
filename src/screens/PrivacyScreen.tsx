@@ -1,8 +1,17 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React from 'react';
-import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  Linking,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { config } from '../config';
 import type { RootStackParamList } from '../navigation';
 import { colors } from '../theme/colors';
 
@@ -18,8 +27,24 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Privacy'>;
  *
  * The claims here are deliberately specific ("read once, then discarded"
  * rather than "we respect your privacy"), because a vague policy is exactly
- * what §3A.6 is trying not to be. Keep this screen, PRIVACY.md, and the
- * actual behaviour in step: if one changes, all three change.
+ * what §3A.6 is trying not to be.
+ *
+ * Keep this screen, the hosted policy at POLICY_URL, and the actual behaviour
+ * in step: if one changes, all three change. `CCMFHK-economic` additionally
+ * carries PRIVACY.md and docs/privacy/index.html, the source of the hosted
+ * page; this branch has neither, so a change made here has to be carried
+ * across rather than assumed to follow.
+ *
+ * Two of the points below are computed rather than written down, because both
+ * describe behaviour that varies by build:
+ *
+ *  - the provider point appears only when `config.useRealProviders` is set,
+ *    which is the same flag that decides whether anything reaches Google at
+ *    all. Deriving the copy from the switch is the only way it cannot end up
+ *    describing a build it is not in;
+ *  - the map point names Apple or Google by platform. react-native-maps draws
+ *    with MapKit on iOS and the Google Maps SDK on Android, so a single
+ *    sentence is wrong on one of them.
  */
 
 /**
@@ -29,7 +54,37 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Privacy'>;
  */
 const POLICY_URL = 'https://cool-starburst-afbe4b.netlify.app/';
 
-const POINTS: { icon: string; title: string; body: string }[] = [
+type Point = { icon: string; title: string; body: string };
+
+/**
+ * Drawn with MapKit on iOS and the Google Maps SDK on Android — the same
+ * `react-native-maps` component, a different map underneath.
+ */
+const MAP_POINT: Point =
+  Platform.OS === 'android'
+    ? {
+        icon: 'map-outline',
+        title: 'Maps come from Google',
+        body: 'Showing a map tells Google which area is on screen, which is what draws it. We receive nothing from that.',
+      }
+    : {
+        icon: 'map-outline',
+        title: 'Maps come from Apple',
+        body: 'Showing a map tells Apple which area is on screen, which is what draws it. We receive nothing from that.',
+      };
+
+/**
+ * Shown only when this build is configured to reach Google (see src/config).
+ * Without a key the app runs entirely on its built-in place list and its own
+ * travel estimates, and nothing here would be true.
+ */
+const PROVIDER_POINT: Point = {
+  icon: 'cloud-search-outline',
+  title: 'Searching asks Google',
+  body: 'This build looks places up through Google. Searching sends what you type, and roughly where you are searching, so it can answer. Planning a day sends the locations of your stops so the travel times are real ones. Your diary is never part of that. Ratings and opening hours that come back are shown while you are looking at them and are not saved.',
+};
+
+const POINTS: Point[] = [
   {
     icon: 'cellphone-lock',
     title: 'Your diary stays on this phone',
@@ -37,8 +92,8 @@ const POINTS: { icon: string; title: string; body: string }[] = [
   },
   {
     icon: 'crosshairs-gps',
-    title: 'Location is read once, when you stamp',
-    body: 'Tapping to stamp reads your location at that moment to find nearby places, then discards it. It is never saved to a visit and never leaves the phone. There is no background tracking.',
+    title: 'Location is read only when you ask for it',
+    body: 'Two things read it: stamping a visit, and setting your starting point from where you are. Each takes a single reading, rounds it to about 100 metres, and uses it there and then. A stamp never saves it. A starting point set this way lasts until you close the app and is never written to storage. There is no background tracking.',
   },
   {
     icon: 'image-outline',
@@ -55,11 +110,8 @@ const POINTS: { icon: string; title: string; body: string }[] = [
     title: 'Backups go where you send them',
     body: 'A backup contains your visits and photos. Attached photos are re-encoded to strip the camera metadata, so the coordinates and capture time do not travel with them. Once you share the file, it follows that service’s rules — treat it like any personal document.',
   },
-  {
-    icon: 'map-outline',
-    title: 'Maps come from Apple',
-    body: 'Showing a map tells Apple which area is on screen, which is what draws it. We receive nothing from that.',
-  },
+  MAP_POINT,
+  ...(config.useRealProviders ? [PROVIDER_POINT] : []),
 ];
 
 export function PrivacyScreen({ navigation }: Props) {
@@ -83,7 +135,7 @@ export function PrivacyScreen({ navigation }: Props) {
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 32 }]}
       >
         <Text style={styles.lede}>
-          PIRT keeps your diary on your phone. We cannot read it, because
+          TripCircle keeps your diary on your phone. We cannot read it, because
           it is never sent to us.
         </Text>
 
@@ -104,7 +156,7 @@ export function PrivacyScreen({ navigation }: Props) {
         ))}
 
         <Text style={styles.rights}>
-          To take your data with you, use Back up on the Summary tab. To erase
+          To take your data with you, use Back up on the Settings tab. To erase
           everything, delete a visit or delete the app — there is nothing on our
           side to remove.
         </Text>

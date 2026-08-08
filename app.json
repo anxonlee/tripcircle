@@ -10,7 +10,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.tripcircle.app",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "TripCircle uses your location only to suggest nearby public landmarks as a starting point. Your exact address is never stored."
+        "NSLocationWhenInUseUsageDescription": "TripCircle reads your location when you stamp a visit or set your starting point, to suggest places near you. It is rounded to about 100 metres and never stored."
       }
     },
     "android": {
