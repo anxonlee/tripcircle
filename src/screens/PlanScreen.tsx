@@ -1258,17 +1258,24 @@ const styles = StyleSheet.create({
    * The box the row's controls sit in, and the box the grip stands in.
    *
    * Deliberately the same for each, and deliberately larger than what it
-   * holds. Same, because a tail that changed height between the two modes
-   * would move every row below it the moment arranging opened — which is the
-   * one thing this mode must not do. Larger, because 44pt is the smallest
-   * thing a thumb hits reliably and this one sits at the screen edge, where
-   * thumbs are least accurate.
+   * holds. Same, because a tail that changed size between the two modes would
+   * move the rest of the row the moment arranging opened — which is the one
+   * thing this mode must not do. Larger, because 44pt is the smallest thing a
+   * thumb hits reliably and this one sits at the screen edge, where thumbs
+   * are least accurate.
+   *
+   * The width is fixed rather than derived, and this branch needs that where
+   * Hong Kong did not: there the box holds one control in each mode, here it
+   * holds two (directions and remove) in one and a grip in the other. Sized
+   * to its contents it came out 50pt against the grip's 44, and the arrival
+   * time beside it slid 6pt sideways as the mode opened. 50 is the wider of
+   * the two, so both modes now measure the same and nothing moves.
    */
   tailControl: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    minWidth: 44,
+    width: 50,
     height: 44,
     gap: 6,
   },
