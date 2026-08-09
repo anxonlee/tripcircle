@@ -42,6 +42,23 @@ function backup(visits: Visit[], photos: unknown[] = [], over: object = {}) {
   });
 }
 
+/**
+ * A file written by a build that called the format `pirt.diary`. Restoring
+ * one has to keep working: the name on the tin changed, what the app accepts
+ * did not. Without this the legacy branch has no coverage at all, since
+ * `backup` above writes the current name.
+ */
+function legacyBackup(visits: Visit[], photos: unknown[] = [], over: object = {}) {
+  return JSON.stringify({
+    format: 'pirt.diary',
+    version: 1,
+    exportedAt: '2026-07-27T00:00:00.000Z',
+    visits,
+    photos,
+    ...over,
+  });
+}
+
 describe('importDiary', () => {
   it('rejects a file that is not a diary export', async () => {
     fileContents = JSON.stringify({ some: 'other file' });
@@ -53,6 +70,13 @@ describe('importDiary', () => {
   it('refuses a backup from a newer app version rather than guessing', async () => {
     fileContents = backup([], [], { version: 99 });
     await expect(importDiary('file:///x.json', [])).rejects.toThrow(/newer version/);
+  });
+
+  it('still restores a backup written when the format was called pirt.diary', async () => {
+    fileContents = legacyBackup([visit('a', 100)]);
+    const { visits, summary } = await importDiary('file:///x.json', []);
+    expect(visits.map((v) => v.id)).toEqual(['a']);
+    expect(summary).toMatchObject({ added: 1, skipped: 0 });
   });
 
   it('adds new visits and keeps them in chronological order', async () => {

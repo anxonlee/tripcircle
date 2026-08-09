@@ -16,9 +16,20 @@ import { restoreVisitPhoto } from './photoStore';
  * That makes the file large; it also makes it complete.
  */
 
-const FORMAT = 'pirt.diary';
-/** Files written before the app was renamed. Still restorable. */
-const LEGACY_FORMATS = ['tripcircle.diary'];
+/**
+ * The marker written into every backup this app produces.
+ *
+ * This branch is TripCircle, so `pirt.diary` moved to the legacy list rather
+ * than staying the current name. The swap is safe in both directions: builds
+ * that wrote `pirt.diary` accepted `tripcircle.diary` as legacy, so a file
+ * written now still restores on an older install, and a file written by an
+ * older install still restores here.
+ *
+ * Nothing about which files are accepted changed. Only which name is written.
+ */
+const FORMAT = 'tripcircle.diary';
+/** Names earlier builds wrote. Still restorable, and must stay that way. */
+const LEGACY_FORMATS = ['pirt.diary'];
 const VERSION = 1;
 
 interface BackupPhoto {
@@ -75,7 +86,10 @@ export async function exportDiary(visits: Visit[]): Promise<string> {
   };
 
   const stamp = new Date().toISOString().slice(0, 10);
-  const target = new File(Paths.cache, `pirt-diary-${stamp}.json`);
+  // The name the user sees in the share sheet and in Files, so it names the
+  // app they are using. Nothing reads it back: restore goes by the `format`
+  // field inside the file, not by the filename.
+  const target = new File(Paths.cache, `tripcircle-diary-${stamp}.json`);
   if (target.exists) target.delete();
   target.create();
   target.write(JSON.stringify(payload));

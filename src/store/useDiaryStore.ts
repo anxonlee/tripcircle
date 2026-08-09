@@ -95,6 +95,17 @@ export const useDiaryStore = create<DiaryState>()(
       replaceVisits: (visits) => set({ visits }),
     }),
     {
+      /**
+       * Keeps the old name on purpose. This is the AsyncStorage key the diary
+       * lives under, not a label: renaming it does not migrate anything, it
+       * points the app at an empty key and every visit already on a device
+       * silently disappears. The backup format string was renamed to
+       * TripCircle because a file carries its own name and old names can stay
+       * readable; a storage key has no such escape.
+       *
+       * If this ever has to change, it needs a migration that reads the old
+       * key first, not an edit.
+       */
       name: 'pirt-diary',
       storage: createJSONStorage(() => AsyncStorage),
       // lastStampedVisitId is a UI cue for the current session, not history:
