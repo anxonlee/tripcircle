@@ -58,9 +58,11 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Privacy'>;
  * back. Guideline 5.1.1(i) wants a privacy policy reachable from inside the
  * app as well as from App Store Connect, and Beta App Review applies it to
  * external TestFlight builds. Internal testing skips that review, which is
- * the only reason this is survivable now. What is needed is a hosted page
- * describing what this file describes — both location readers, the Google
- * seam when a key is configured, and Apple or Google maps by platform.
+ * the only reason this is survivable now.
+ *
+ * The page to deploy is already written, at docs/privacy/index.html. Deploy
+ * it to a site of its own, never over PIRT's, then restore a POLICY_URL here
+ * pointing at it. PRIVACY.md at the repository root has the rest.
  */
 
 type Point = { icon: string; title: string; body: string };
