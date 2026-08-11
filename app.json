@@ -8,14 +8,14 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anxonlee.tripcircle",
+      "bundleIdentifier": "com.anxonlee.pirt",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSLocationWhenInUseUsageDescription": "TripCircle reads your location when you stamp a visit or set your starting point, to suggest places near you. It is rounded to about 100 metres and never stored."
       }
     },
     "android": {
-      "package": "com.anxonlee.tripcircle",
+      "package": "com.anxonlee.pirt",
       "adaptiveIcon": {
         "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/android-icon-foreground.png",
