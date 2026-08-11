@@ -41,7 +41,7 @@
           "locationWhenInUsePermission": "TripCircle reads your location when you stamp a visit or set your starting point, to suggest places near you. It is rounded to about 100 metres and never stored.",
           "locationAlwaysAndWhenInUsePermission": false,
           "locationAlwaysPermission": false,
-          "motionUsagePermission": false,
+          "motionUsagePermission": "TripCircle never asks for motion data. The location component it is built on can read motion activity, so iOS requires this notice even though the app does not request it.",
           "isIosBackgroundLocationEnabled": false,
           "isAndroidBackgroundLocationEnabled": false
         }
