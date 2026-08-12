@@ -218,20 +218,68 @@ export function PlanScreen({ navigation }: Props) {
   const plan = plans?.[goal] ?? null;
   const goalIndex = OBJECTIVES.findIndex((o) => o.goal === goal);
 
-  /** Tap on the bar: move the pager, which is the single source of truth. */
+  /**
+   * Where the pager opens — at mount, and again when arranging ends and the
+   * pager remounts.
+   *
+   * On iOS `contentOffset` is not an initial-only prop: any change to its
+   * value is re-applied as an instant, unanimated jump. Passing the live
+   * goal index made every tap on the bar a three-way race — selectGoal
+   * starts an animated scrollTo, the setGoal re-render stomps that animation
+   * with the prop, and the interrupted animation fires its momentum-end at a
+   * garbage offset that onPagerSettled rounds to a NEIGHBOURING page.
+   * Tapping Fastest selected Least Walking; tapping Balanced, Economic.
+   *
+   * `editing` is deliberately the only dependency. Recomputing on goal
+   * changes is precisely the bug; recomputing when the pager remounts after
+   * arranging is the one time the prop must be fresh, because the goal may
+   * have changed while the pager did not exist.
+   */
+  const pagerMountOffset = useMemo(
+    () => ({ x: goalIndex * width, y: 0 }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [editing]
+  );
+
+  /**
+   * The page a programmatic scroll is heading for; null when the pager is
+   * the user's. A tap has to survive its own scroll animation — the scrollTo
+   * below emits exactly one momentum-end when it lands, and without this
+   * marker that event is indistinguishable from a swipe.
+   */
+  const pendingPage = useRef<number | null>(null);
+
+  /** Tap on the bar: set the goal and bring the pager along. */
   const selectGoal = useCallback(
     (next: Goal) => {
       const i = OBJECTIVES.findIndex((o) => o.goal === next);
+      pendingPage.current = i;
       pagerRef.current?.scrollTo({ x: i * width, animated: true });
       setGoal(next);
     },
     [width, setGoal]
   );
 
-  /** Swipe: keep the bar in sync. Reads cache only, never re-solves. */
+  /**
+   * Swipe: keep the bar in sync. Reads cache only, never re-solves.
+   *
+   * A settle that lands where a tap was already heading is that tap's own
+   * scroll reporting in, and is swallowed — the goal is already set. A
+   * settle anywhere else is the user's, whether or not a scroll was in
+   * flight (grabbing the pager mid-animation is allowed to win). The index
+   * is clamped because paging bounce can report past either end.
+   */
   const onPagerSettled = useCallback(
     (x: number) => {
-      const i = Math.round(x / width);
+      const i = Math.min(
+        OBJECTIVES.length - 1,
+        Math.max(0, Math.round(x / width))
+      );
+      if (pendingPage.current !== null && i === pendingPage.current) {
+        pendingPage.current = null;
+        return;
+      }
+      pendingPage.current = null;
       const next = OBJECTIVES[i]?.goal;
       if (next && next !== goal) setGoal(next);
     },
@@ -814,7 +862,7 @@ export function PlanScreen({ navigation }: Props) {
               horizontal
               pagingEnabled
               showsHorizontalScrollIndicator={false}
-              contentOffset={{ x: goalIndex * width, y: 0 }}
+              contentOffset={pagerMountOffset}
               onMomentumScrollEnd={(e) =>
                 onPagerSettled(e.nativeEvent.contentOffset.x)
               }
