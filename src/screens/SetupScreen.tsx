@@ -117,49 +117,86 @@ export function SetupScreen({ navigation }: Props) {
           />
         </View>
 
-        {here ? (
-          <Pressable
-            style={({ pressed }) => [styles.hereRow, pressed && styles.rowPressed]}
-            onPress={startFromHere}
-          >
-            <View style={styles.hereIcon}>
-              <MaterialCommunityIcons
-                name="crosshairs-gps"
-                size={17}
-                color={colors.positive}
-              />
-            </View>
-            <View style={styles.rowText}>
-              <Text style={styles.rowName}>Start from where I am</Text>
-              <Text style={styles.rowKind}>Used for this plan only, never saved</Text>
-            </View>
-            <MaterialCommunityIcons
-              name="chevron-right"
-              size={20}
-              color={colors.textMuted}
-            />
-          </Pressable>
-        ) : (
-          <Pressable
-            style={({ pressed }) => [styles.locBtn, pressed && styles.rowPressed]}
-            onPress={useMyLocation}
-            disabled={locating}
-          >
+        {/**
+         * One control, three states, never replaced by a differently-named
+         * one. The previous version swapped "Find landmarks near me" for
+         * "Start from where I am" — two different actions sharing a slot,
+         * where tapping the first was the only way to discover the second
+         * existed, and the second did something the first did not.
+         *
+         * Now the row keeps its position and its meaning: it is always the
+         * location control. What changes is what it can do once it knows
+         * where you are.
+         */}
+        <Pressable
+          style={({ pressed }) => [
+            styles.locCard,
+            here && styles.locCardReady,
+            pressed && styles.rowPressed,
+          ]}
+          onPress={here ? startFromHere : useMyLocation}
+          disabled={locating}
+          accessibilityRole="button"
+          accessibilityLabel={
+            here
+              ? 'Start from where I am. Used for this plan only, never saved.'
+              : 'Use my current location to sort landmarks by distance'
+          }
+        >
+          <View style={[styles.locIcon, here && styles.locIconReady]}>
             {locating ? (
               <ActivityIndicator size="small" color={colors.textSecondary} />
             ) : (
               <MaterialCommunityIcons
                 name="crosshairs-gps"
-                size={16}
-                color={colors.textSecondary}
+                size={17}
+                color={here ? colors.positive : colors.textSecondary}
               />
             )}
-            <Text style={styles.locBtnText}>
-              {locating ? 'Finding you…' : 'Find landmarks near me'}
+          </View>
+          <View style={styles.rowText}>
+            <Text style={styles.locTitle}>
+              {locating
+                ? 'Finding you…'
+                : here
+                  ? 'Start from where I am'
+                  : 'Use my current location'}
             </Text>
-          </Pressable>
+            <Text style={styles.locCaption}>
+              {locating
+                ? 'Taking a single reading'
+                : here
+                  ? 'Used for this plan only, never saved'
+                  : 'Sorts the landmarks below by distance'}
+            </Text>
+          </View>
+          {!locating && (
+            <MaterialCommunityIcons
+              name="chevron-right"
+              size={20}
+              color={colors.textMuted}
+            />
+          )}
+        </Pressable>
+
+        {/**
+         * The error belongs to the control that failed, so it sits attached
+         * to it rather than floating under the card, and it offers the retry
+         * rather than leaving the user to guess that tapping again is allowed.
+         */}
+        {locError && (
+          <View style={styles.locErrorRow}>
+            <MaterialCommunityIcons
+              name="alert-circle-outline"
+              size={14}
+              color={colors.warning}
+            />
+            <Text style={styles.locError}>{locError}</Text>
+            <Pressable onPress={useMyLocation} hitSlop={8}>
+              <Text style={styles.locRetry}>Try again</Text>
+            </Pressable>
+          </View>
         )}
-        {locError && <Text style={styles.locError}>{locError}</Text>}
       </View>
       <FlatList
         data={ordered}
@@ -193,6 +230,18 @@ export function SetupScreen({ navigation }: Props) {
             />
           </Pressable>
         )}
+        /**
+         * Makes the re-sort visible. Locating quietly reorders the list, and
+         * without a header the only evidence is that distances appeared —
+         * which the user has to notice and interpret.
+         */
+        ListHeaderComponent={
+          ordered.length > 0 ? (
+            <Text style={styles.listHeader}>
+              {here ? 'Nearest to you first' : 'Landmarks'}
+            </Text>
+          ) : null
+        }
         ListEmptyComponent={
           <Text style={styles.empty}>No landmarks match “{query}”</Text>
         }
@@ -252,22 +301,14 @@ const styles = StyleSheet.create({
   rowName: { fontSize: 14, fontWeight: '500', color: colors.textPrimary },
   rowKind: { fontSize: 12, color: colors.textSecondary, marginTop: 1 },
   rowDistance: { fontSize: 12, color: colors.textMuted },
-  /** Secondary button (ui-guide §5) — landmark-first stays the emphasis, so
-   *  the GPS affordance is deliberately not the clay primary. */
-  locBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 7,
-    marginTop: 10,
-    paddingVertical: 11,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
-    backgroundColor: colors.surface,
-  },
-  locBtnText: { fontSize: 13, fontWeight: '500', color: colors.textSecondary },
-  hereRow: {
+  /**
+   * The location control (ui-guide §5). One card in one position, whatever
+   * state it is in — only its border and icon tint shift once it has a
+   * reading, so the change reads as "this now knows something" rather than
+   * as a different control appearing. Deliberately not the clay primary:
+   * landmark-first stays the emphasis.
+   */
+  locCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
@@ -275,22 +316,52 @@ const styles = StyleSheet.create({
     padding: 11,
     borderRadius: 12,
     borderWidth: 1,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surface,
+  },
+  locCardReady: {
     borderColor: colors.positive,
     backgroundColor: colors.selectedWell,
   },
-  hereIcon: {
+  locIcon: {
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surfaceAlt,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  locIconReady: { backgroundColor: colors.surface },
+  locTitle: { fontSize: 14, fontWeight: '500', color: colors.textPrimary },
+  locCaption: { fontSize: 12, color: colors.textSecondary, marginTop: 1 },
+  locErrorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    paddingHorizontal: 2,
+  },
   locError: {
+    flex: 1,
     fontSize: 11,
     color: colors.warning,
-    marginTop: 8,
-    textAlign: 'center',
+    lineHeight: 15,
+  },
+  locRetry: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: colors.textSecondary,
+    textDecorationLine: 'underline',
+  },
+  listHeader: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 4,
   },
   empty: {
     textAlign: 'center',
