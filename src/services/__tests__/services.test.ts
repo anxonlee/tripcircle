@@ -76,7 +76,7 @@ describe('mock transport tables', () => {
 
     it('prices the transbay ferry at its real fare, not a doubled one', () => {
       const ferry = estimateLeg(ferryBuilding, jackLondon, 'ferry');
-      expect(ferry.costUsd).toBe(5.1); // SF Bay Ferry adult, verified 2026-08-04
+      expect(ferry.costUsd).toBe(5.1); // SF Bay Ferry adult Clipper, re-checked 2026-08-11
     });
 
     it('has no BART across the Golden Gate', () => {

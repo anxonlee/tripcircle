@@ -2,12 +2,30 @@ import type { LatLng, LegEstimate, TransportMode } from '../../domain/types';
 import { haversineKm } from '../../lib/geo';
 
 /**
- * Bay Area transport model — TEMP FIXTURE.
+ * Bay Area transport model.
  *
- * Fares and speeds below are approximations authored for development, not
- * sourced from 511.org, Muni, BART or any operator. Replacing them with live
- * provider data is a near-term deliverable; the RoutingService interface
- * exists so that substitution never touches the optimizer.
+ * PUBLISHED TARIFFS, checked 2026-08-11 against the operator or the tolling
+ * authority. Each carries its source at the point of use:
+ *
+ *   - Muni single ride, $2.85 Clipper ($3.00 cash) — SFMTA
+ *   - Bay Bridge and Richmond–San Rafael, $8.50 — BATA via 511.org, from
+ *     1 Jan 2026
+ *   - Golden Gate Bridge, $10.25 FasTrak — Golden Gate district, from
+ *     1 Jul 2026
+ *   - SF Bay Ferry Oakland/Alameda↔SF, $5.10 — operator, from 1 Jul 2026
+ *   - Golden Gate Ferry Sausalito↔SF, $8.50 Clipper — operator
+ *   - BART's minimum fare, $2.55 — BART, from 1 Jan 2026
+ *
+ * STILL ESTIMATES, and not to be described otherwise: every speed, every
+ * overhead, every crossing duration, BART's distance steps above the minimum,
+ * BART's transbay premium, rideshare pricing, parking, and fuel-and-wear.
+ * These are authored for development. Replacing them with live provider data
+ * is a near-term deliverable; the RoutingService interface exists so that
+ * substitution never touches the optimizer.
+ *
+ * A tariff is only current until the operator moves it, and four of the six
+ * above changed within the last eight months. Re-check the dates before
+ * quoting any of this outside the app.
  *
  * Two deliberate structural choices:
  *
@@ -55,11 +73,20 @@ function landmass(p: LatLng): Landmass {
  * run these routes at different prices, so a single "ferry fare" would be
  * wrong on at least one of them.
  *
- * VERIFIED 2026-08-04: SF Bay Ferry Oakland/Alameda↔SF adult $5.10 (effective
- * 1 Jul 2026); Golden Gate Ferry Sausalito↔SF $6.25 Clipper / $11.75 cash —
- * Clipper used for consistency with the Muni fare above.
- * NOT VERIFIED: bridge tolls, BART's transbay surcharge, and all crossing
- * durations remain authored approximations.
+ * CHECKED 2026-08-11 against each operator and tolling authority. Clipper
+ * fares are used throughout, for consistency with the Muni fare above.
+ *
+ * KNOWN OVERSTATEMENT, and the reason it is left in place: the Golden Gate
+ * toll is collected SOUTHBOUND ONLY, Marin into San Francisco. This table is
+ * keyed on an unordered pair, so it charges the toll in both directions and a
+ * Marin round trip is priced about $10.25 too high. Fixing it means making
+ * crossings directional, which is a change to `estimateLeg` rather than to
+ * this data, and is deliberately not bundled with a data update. The Bay
+ * Bridge and Richmond–San Rafael tolls are also one-way westbound, so the
+ * same overstatement applies to them.
+ *
+ * Crossing DURATIONS remain authored estimates. Only the money below is
+ * sourced.
  */
 const CROSSING: Record<
   string,
@@ -67,21 +94,29 @@ const CROSSING: Record<
 > = {
   // Transbay tube, Bay Bridge, and SF Bay Ferry services.
   'eastbay|sf': {
+    // ESTIMATE: BART publishes no separate transbay surcharge, only a
+    // station-to-station table. This premium is authored.
     bart: { min: 8, usd: 2.2 },
+    // SF Bay Ferry adult Clipper, Oakland/Alameda↔SF, from 1 Jul 2026.
     ferry: { min: 25, usd: 5.1 },
-    rideshare: { min: 12, usd: 8.0 },
-    drive: { min: 12, usd: 8.0 },
+    // Bay Bridge, 2-axle, from 1 Jan 2026 (BATA). Was $8.00.
+    rideshare: { min: 12, usd: 8.5 },
+    drive: { min: 12, usd: 8.5 },
   },
   // Golden Gate Bridge and Golden Gate Ferry. No BART across the Golden Gate.
   'marin|sf': {
-    ferry: { min: 30, usd: 6.25 },
-    rideshare: { min: 14, usd: 9.75 },
-    drive: { min: 14, usd: 9.75 },
+    // Golden Gate Ferry adult Clipper, Sausalito↔SF ($14.00 on paper).
+    // Was $6.25, which no schedule this year supports.
+    ferry: { min: 30, usd: 8.5 },
+    // Golden Gate Bridge, 2-axle FasTrak, from 1 Jul 2026. Was $9.75.
+    rideshare: { min: 14, usd: 10.25 },
+    drive: { min: 14, usd: 10.25 },
   },
   // Richmond–San Rafael Bridge only; no rail, no scheduled passenger ferry.
   'eastbay|marin': {
-    rideshare: { min: 15, usd: 8.0 },
-    drive: { min: 15, usd: 8.0 },
+    // Also a BATA bridge, so the same $8.50 as the Bay Bridge. Was $8.00.
+    rideshare: { min: 15, usd: 8.5 },
+    drive: { min: 15, usd: 8.5 },
   },
 };
 
@@ -107,19 +142,33 @@ const MODE_TABLE: Record<TransportMode, ModeSpec> = {
   },
   muni: {
     // Buses, streetcars and the metro: one flat fare however far you ride.
+    // $2.85 Clipper, $3.00 cash (SFMTA). Clipper, to match the ferries.
+    // Note: SFMTA has proposed removing the Clipper discount in the FY2026-27
+    // budget, which would make this $3.00.
     speedKmH: 13,
     overheadMin: 8,
     cost: () => 2.85,
   },
   bart: {
-    // Stepped by distance, and faster than Muni once you are past a few km.
+    /**
+     * Stepped by distance, and faster than Muni once you are past a few km.
+     *
+     * Only the first step is a real number: $2.55 is BART's published minimum
+     * fare from 1 Jan 2026. BART prices station-to-station rather than by
+     * distance band, so there is no published table this shape could be read
+     * off, and the three longer steps are authored. They were moved by the
+     * same 6.2% BART applied on 1 Jan 2026 so they sit at today's price level
+     * rather than an older one, and they stay inside BART's published
+     * $2.55–$17.25 range, but they are an approximation of a curve, not a
+     * fare table. Do not quote them.
+     */
     speedKmH: 32,
     overheadMin: 11,
     cost: (km) => {
-      if (km <= 5) return 2.6;
-      if (km <= 15) return 4.4;
-      if (km <= 30) return 6.3;
-      return 8.5;
+      if (km <= 5) return 2.55;
+      if (km <= 15) return 4.65;
+      if (km <= 30) return 6.7;
+      return 9.05;
     },
   },
   ferry: {
