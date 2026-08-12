@@ -3,7 +3,7 @@ import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { CompositeNavigationProp } from '@react-navigation/native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -69,6 +69,16 @@ export function PlanSuggestScreen() {
   const enoughHistory = hasEnoughHistory(visits);
 
   /**
+   * Pre-threshold suggestions, but only ever asked for (§3.3.0.1 gates the
+   * *automatic* path; this is opt-in). With a thin diary the ranking runs on
+   * the dataset's own signals — curation, price, hours, distance — which is
+   * honest editorial judgement, and the screen says so rather than dressing
+   * it up as personal. `suggestDay` is already pure about this: ranking with
+   * an empty diary is a meaningful thing to ask for, and the tests ask for it.
+   */
+  const [wantsStarter, setWantsStarter] = useState(false);
+
+  /**
    * What the user chose in Explore, in the order they chose it. The planner
    * sequences this; it never adds to it or swaps anything out (§3.3.0).
    */
@@ -89,7 +99,7 @@ export function PlanSuggestScreen() {
    */
   const suggestions = useMemo(
     () =>
-      startPlace && enoughHistory && !hasSelection
+      startPlace && (enoughHistory || wantsStarter) && !hasSelection
         ? suggestDay(
             // A dismissed place is out of the running entirely, not filtered
             // from the result: dropping it after the fact would leave a short
@@ -106,6 +116,7 @@ export function PlanSuggestScreen() {
     [
       startPlace,
       enoughHistory,
+      wantsStarter,
       hasSelection,
       visits,
       dayStartMin,
@@ -180,7 +191,7 @@ export function PlanSuggestScreen() {
    * the words: a screen whose only content is text telling the user to be on
    * a different tab is the worst-converting empty state there is.
    */
-  if (!enoughHistory && !hasSelection) {
+  if (!enoughHistory && !hasSelection && !wantsStarter) {
     const visited = distinctPlacesVisited(visits);
     const remaining = SUGGESTION_HISTORY_THRESHOLD - visited;
     return (
@@ -203,6 +214,26 @@ export function PlanSuggestScreen() {
           <MaterialCommunityIcons name="compass-outline" size={16} color="#FFFFFF" />
           <Text style={styles.primaryText}>Find places</Text>
         </Pressable>
+        {/*
+          Opt-in, and deliberately secondary: picking your own places stays
+          the emphasis, and the caption says what a starter day is not —
+          §3.3.0.1 gates automatic suggestions on the diary precisely so a
+          guess is never passed off as personal.
+        */}
+        <Pressable
+          style={styles.secondary}
+          onPress={() => setWantsStarter(true)}
+        >
+          <MaterialCommunityIcons
+            name="lightbulb-outline"
+            size={15}
+            color={colors.textSecondary}
+          />
+          <Text style={styles.secondaryText}>Want a suggestion?</Text>
+        </Pressable>
+        <Text style={styles.secondaryHint}>
+          A starter day from the map — not from your diary yet.
+        </Text>
       </View>
     );
   }
@@ -224,9 +255,12 @@ export function PlanSuggestScreen() {
           {hasSelection ? 'Your places' : 'Plan a day out'}
         </Text>
         <Text style={styles.sub}>
+          {/* A starter day is the map's judgement, not the diary's — say so. */}
           {hasSelection
             ? `${dayItems.length} chosen · from ${startPlace.name}`
-            : `Suggestions · from ${startPlace.name}`}
+            : enoughHistory
+              ? `Suggestions · from ${startPlace.name}`
+              : `A starter day · from ${startPlace.name}`}
         </Text>
       </View>
 
@@ -442,6 +476,28 @@ const styles = StyleSheet.create({
   },
   primaryOff: { opacity: 0.4 },
   primaryText: { fontSize: 14, fontWeight: '500', color: '#FFFFFF' },
+  /** Secondary button (ui-guide §5) — bordered, not the clay primary. */
+  secondary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    marginTop: 10,
+    paddingVertical: 11,
+    paddingHorizontal: 18,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surface,
+  },
+  secondaryText: { fontSize: 13, fontWeight: '500', color: colors.textSecondary },
+  secondaryHint: {
+    fontSize: 11,
+    color: colors.textMuted,
+    marginTop: 8,
+    textAlign: 'center',
+    paddingHorizontal: 32,
+  },
   hint: {
     fontSize: 11,
     color: colors.textMuted,
