@@ -63,7 +63,7 @@ describe('importDiary', () => {
   it('rejects a file that is not a diary export', async () => {
     fileContents = JSON.stringify({ some: 'other file' });
     await expect(importDiary('file:///x.json', [])).rejects.toThrow(
-      /not a TripCircle diary export/
+      /not a PIRT diary export/
     );
   });
 

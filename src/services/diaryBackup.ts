@@ -112,7 +112,7 @@ export async function importDiary(
     parsed.format === FORMAT ||
     (typeof parsed.format === 'string' && LEGACY_FORMATS.includes(parsed.format));
   if (!recognised || !Array.isArray(parsed.visits)) {
-    throw new Error('That file is not a TripCircle diary export.');
+    throw new Error('That file is not a PIRT diary export.');
   }
   if ((parsed.version ?? 0) > VERSION) {
     throw new Error('That backup was made by a newer version of the app.');

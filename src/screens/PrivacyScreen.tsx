@@ -146,7 +146,7 @@ export function PrivacyScreen({ navigation }: Props) {
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 32 }]}
       >
         <Text style={styles.lede}>
-          TripCircle keeps your diary on your phone. We cannot read it, because
+          PIRT keeps your diary on your phone. We cannot read it, because
           it is never sent to us.
         </Text>
 
