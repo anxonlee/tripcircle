@@ -8,6 +8,15 @@ import type {
 import { formatDayEnd, formatTime } from '../geo';
 
 /**
+ * "usually " when a place's hours are a category default rather than the
+ * venue's own (`hoursEstimated`). Every warning that quotes an opening or
+ * closing time goes through this, so a guessed window is never stated as
+ * fact — the dataset rule in BAY-AREA-DELTA.md, applied at the last moment
+ * the number is still attached to the place it came from.
+ */
+const usually = (p: CuratedPlace): string => (p.hoursEstimated ? 'usually ' : '');
+
+/**
  * Day-plan optimizer. Pure TypeScript, no UI or provider imports — travel
  * estimates come in through `legOptions`, so the module is fully unit-testable
  * and provider-agnostic.
@@ -372,7 +381,7 @@ function schedule(
     if (place.openHours && arriveMin < place.openHours.open) {
       waitMin = place.openHours.open - arriveMin;
       if (waitMin >= 15) {
-        warnings.push(`${place.name} opens at ${formatTime(place.openHours.open)} — ${waitMin} min wait`);
+        warnings.push(`${place.name} ${usually(place)}opens at ${formatTime(place.openHours.open)} — ${waitMin} min wait`);
       }
     }
     const beginMin = arriveMin + waitMin;
@@ -380,10 +389,10 @@ function schedule(
       if (beginMin >= place.openHours.close) {
         hardClosingViolations++;
         warnings.push(
-          `Arrives ${formatTime(beginMin)}, after ${place.name} closes (${formatTime(place.openHours.close)})`
+          `Arrives ${formatTime(beginMin)}, after ${place.name} ${usually(place)}closes (${formatTime(place.openHours.close)})`
         );
       } else if (beginMin + place.visitDurationMin > place.openHours.close) {
-        warnings.push(`${place.name} closes at ${formatTime(place.openHours.close)}, before the visit ends`);
+        warnings.push(`${place.name} ${usually(place)}closes at ${formatTime(place.openHours.close)}, before the visit ends`);
       }
     }
     const departMin = beginMin + place.visitDurationMin;
@@ -826,7 +835,7 @@ export function optimizeDay(rawInput: OptimizeInput): DayPlan {
   );
   for (const p of unfittable) {
     warnings.push(
-      `${p.name} is closed for the whole of your day (open ${formatTime(p.openHours!.open)}–${formatTime(p.openHours!.close)})`
+      `${p.name} is closed for the whole of your day (${usually(p)}open ${formatTime(p.openHours!.open)}–${formatTime(p.openHours!.close)})`
     );
   }
 
@@ -852,7 +861,7 @@ export function optimizeDay(rawInput: OptimizeInput): DayPlan {
     // and this module schedules them, and the dependency runs one way.
     if (needed <= 24 * 60 - 1) {
       warnings.push(
-        `${latest.name} opens at ${formatTime(latest.openHours!.open)} — a day running to ${formatTime(needed)} would fit it in`
+        `${latest.name} ${usually(latest)}opens at ${formatTime(latest.openHours!.open)} — a day running to ${formatTime(needed)} would fit it in`
       );
     }
   }
@@ -884,7 +893,7 @@ export function optimizeDay(rawInput: OptimizeInput): DayPlan {
       b.waitMin > a.waitMin ? b : a
     );
     const opensAt = pinned.place.openHours
-      ? ` ${pinned.place.name} opens at ${formatTime(pinned.place.openHours.open)}, so leaving earlier only adds waiting.`
+      ? ` ${pinned.place.name} ${usually(pinned.place)}opens at ${formatTime(pinned.place.openHours.open)}, so leaving earlier only adds waiting.`
       : '';
     warnings.push(
       `Leaving at ${formatTime(dayStartMin)} rather than ${formatTime(input.dayStartMin)}, which saves ${later.savedWaitMin} min of waiting for the same places and the same finish.${opensAt}`

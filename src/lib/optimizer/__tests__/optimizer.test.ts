@@ -252,6 +252,21 @@ describe('open hours', () => {
     expect(stop.beginMin).toBe(10 * 60);
     expect(stop.waitMin).toBeGreaterThan(0);
     expect(plan.warnings.join(' ')).toContain('opens at 10:00');
+    // Real hours are stated as fact — no hedge.
+    expect(plan.warnings.join(' ')).not.toContain('usually');
+  });
+
+  it('hedges the same warning when the hours are a category estimate', () => {
+    // 206 of the dataset's 421 hour-carrying records are `hoursEstimated` —
+    // category defaults, not the venue's own times. A wait computed from one
+    // must say so, or the planner presents a guess as fact (the dataset rule
+    // in BAY-AREA-DELTA.md).
+    const cafe = makePlace('guessed-cafe', 0.009, {
+      openHours: { open: 10 * 60, close: 22 * 60 },
+      hoursEstimated: true,
+    });
+    const plan = optimizeDay(baseInput({ places: [cafe] }));
+    expect(plan.warnings.join(' ')).toContain('usually opens at 10:00');
   });
 
   it('warns when a stop is reached after closing', () => {

@@ -3,26 +3,16 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { CuratedPlace } from '../domain/types';
 import { formatPriceBand } from '../lib/format';
-import { formatTime } from '../lib/geo';
+import { openStatus } from '../lib/openStatus';
 import { categoryLabels, colors } from '../theme/colors';
 import { IconTile } from './IconTile';
 
 export const CARD_HEIGHT = 76;
 export const CARD_GAP = 9;
 
-/** "Open now" logic incl. past-midnight closers (close > 24:00). */
-function openStatus(p: CuratedPlace): { open: boolean; text: string } {
-  if (!p.openHours) return { open: true, text: '' };
-  const now = new Date();
-  const nowMin = now.getHours() * 60 + now.getMinutes();
-  const { open, close } = p.openHours;
-  const isOpen =
-    (nowMin >= open && nowMin < close) ||
-    (nowMin + 1440 >= open && nowMin + 1440 < close);
-  return isOpen
-    ? { open: true, text: `til ${formatTime(close)}` }
-    : { open: false, text: `Opens ${formatTime(open)}` };
-}
+// "Open now" / "Usually open" logic lives in src/lib/openStatus.ts, pure and
+// tested with fake timers — see the comment there for why estimated hours
+// are hedged.
 
 /**
  * Place card per ui-guide §5: tinted icon tile · name / meta (theme, price
@@ -76,7 +66,7 @@ export function PlaceCard({
         <Text style={styles.cardStatus} numberOfLines={1}>
           {status.open ? (
             <>
-              <Text style={styles.cardOpen}>Open now</Text>
+              <Text style={styles.cardOpen}>{status.label}</Text>
               {status.text ? (
                 <Text style={styles.cardStatusMuted}> · {status.text}</Text>
               ) : null}

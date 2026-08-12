@@ -259,7 +259,10 @@ export function StartDayScreen({ navigation }: Props) {
 
               {current.waitMin >= 15 && (
                 <Text style={styles.wait}>
-                  Opens at{' '}
+                  {/* Estimated hours are hedged, here as on the place card —
+                      a wait stated to the minute off a guessed window is the
+                      planner presenting a guess as fact. */}
+                  {current.place.hoursEstimated ? 'Usually opens at' : 'Opens at'}{' '}
                   {current.place.openHours
                     ? formatTime(current.place.openHours.open)
                     : ''}{' '}
