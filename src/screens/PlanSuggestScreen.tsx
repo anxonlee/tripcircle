@@ -10,6 +10,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CategoryPin, PIN_ANCHOR, PinSlot, StartPin } from '../components/CategoryPin';
 import { categoryIcon } from '../components/icons';
 import { formatPriceBand } from '../lib/format';
+import { openStatus } from '../lib/openStatus';
 
 import {
   SUGGESTION_HISTORY_THRESHOLD,
@@ -335,6 +336,14 @@ export function PlanSuggestScreen() {
 
         {dayItems.map((s, i) => {
           const primary = s.place.themes[0];
+          /*
+            The same open/closed line the Explore card shows, so a suggested
+            day can be judged where it is offered. Without it the first honest
+            word about opening times is an optimiser warning, which arrives
+            after the day has been committed to — and half the records carry
+            category-estimated hours, which is exactly what "usually" hedges.
+          */
+          const status = openStatus(s.place);
           return (
             <View key={s.place.id} style={styles.row}>
               <View
@@ -353,6 +362,18 @@ export function PlanSuggestScreen() {
                 <Text style={styles.meta}>
                   {s.place.district} · {s.place.visitDurationMin} min ·{' '}
                   {formatPriceBand(s.place.priceBand)}
+                </Text>
+                <Text style={styles.status} numberOfLines={1}>
+                  {status.open ? (
+                    <>
+                      <Text style={styles.statusOpen}>{status.label}</Text>
+                      {status.text ? (
+                        <Text style={styles.statusMuted}> · {status.text}</Text>
+                      ) : null}
+                    </>
+                  ) : (
+                    <Text style={styles.statusMuted}>{status.text}</Text>
+                  )}
                 </Text>
                 {s.reasons.length > 0 && (
                   <Text style={styles.reason}>{s.reasons.join(' · ')}</Text>
@@ -451,6 +472,16 @@ const styles = StyleSheet.create({
   },
   name: { fontSize: 14, fontWeight: '500', color: colors.textPrimary },
   meta: { fontSize: 12, color: colors.textSecondary },
+  /*
+    Closed reads muted, not as a warning, and deliberately: the status is
+    against the clock right now, while the day may be planned for hours
+    later. Arrival-time reasoning belongs to the optimiser, which already
+    warns. Colouring "Opens 11:00" as a problem here would raise an alarm
+    the screen cannot know is one.
+  */
+  status: { fontSize: 11, marginTop: 1 },
+  statusOpen: { color: colors.positive, fontSize: 11, fontWeight: '500' },
+  statusMuted: { color: colors.textMuted, fontSize: 11 },
   reason: { fontSize: 11, color: colors.textMuted },
   emptyTitle: {
     fontSize: 15,
