@@ -264,6 +264,27 @@ export function PlanSuggestScreen() {
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
+        {/*
+          Only a suggested day has somewhere to go back to — the two-option
+          screen the user asked it from. A selection has no back: the places
+          are the user's own and dropping them is what the × on each row is
+          for, which is why the arrow is absent rather than disabled.
+        */}
+        {!hasSelection && (
+          <Pressable
+            onPress={() => setWantsSuggestion(false)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            accessibilityRole="button"
+            accessibilityLabel="Back to how you want to plan"
+            style={styles.back}
+          >
+            <MaterialCommunityIcons
+              name="chevron-left"
+              size={22}
+              color={colors.textSecondary}
+            />
+          </Pressable>
+        )}
         <Text style={styles.title}>
           {hasSelection ? 'Your places' : 'Plan a day out'}
         </Text>
@@ -442,6 +463,17 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.surface },
   center: { alignItems: 'center', justifyContent: 'center', gap: 12, padding: 32 },
   header: { paddingHorizontal: 16, paddingBottom: 10 },
+  /* Sits above the title, pulled left so the chevron's own bearing lines the
+     glyph up with the title's stem rather than its box. */
+  back: {
+    alignSelf: 'flex-start',
+    marginLeft: -6,
+    marginBottom: 2,
+    width: 30,
+    height: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   title: { fontSize: 17, fontWeight: '500', color: colors.textPrimary },
   sub: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
   mapWrap: {
