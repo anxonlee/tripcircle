@@ -265,26 +265,34 @@ export function PlanSuggestScreen() {
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         {/*
-          Only a suggested day has somewhere to go back to — the two-option
-          screen the user asked it from. A selection has no back: the places
-          are the user's own and dropping them is what the × on each row is
-          for, which is why the arrow is absent rather than disabled.
+          Back goes wherever the day on screen came from: a suggestion came
+          from the two options, a selection came from Explore. Neither throws
+          anything away — going back to Explore keeps the selection, and the
+          × on each row stays the only way to drop a place. An arrow that
+          silently binned the user's own picks would be the one thing a back
+          button must never be.
         */}
-        {!hasSelection && (
-          <Pressable
-            onPress={() => setWantsSuggestion(false)}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            accessibilityRole="button"
-            accessibilityLabel="Back to how you want to plan"
-            style={styles.back}
-          >
-            <MaterialCommunityIcons
-              name="chevron-left"
-              size={22}
-              color={colors.textSecondary}
-            />
-          </Pressable>
-        )}
+        <Pressable
+          onPress={() =>
+            hasSelection
+              ? navigation.navigate('Explore')
+              : setWantsSuggestion(false)
+          }
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          accessibilityRole="button"
+          accessibilityLabel={
+            hasSelection
+              ? 'Back to Explore, keeping your places'
+              : 'Back to how you want to plan'
+          }
+          style={styles.back}
+        >
+          <MaterialCommunityIcons
+            name="chevron-left"
+            size={22}
+            color={colors.textSecondary}
+          />
+        </Pressable>
         <View style={styles.headerText}>
           <Text style={styles.title}>
             {hasSelection ? 'Your places' : 'Plan a day out'}
