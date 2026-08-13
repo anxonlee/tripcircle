@@ -70,14 +70,20 @@ export function PlanSuggestScreen() {
   const enoughHistory = hasEnoughHistory(visits);
 
   /**
-   * Pre-threshold suggestions, but only ever asked for (§3.3.0.1 gates the
-   * *automatic* path; this is opt-in). With a thin diary the ranking runs on
-   * the dataset's own signals — curation, price, hours, distance — which is
-   * honest editorial judgement, and the screen says so rather than dressing
-   * it up as personal. `suggestDay` is already pure about this: ranking with
-   * an empty diary is a meaningful thing to ask for, and the tests ask for it.
+   * Suggestions are asked for, never volunteered — at any diary size. With no
+   * plan yet the tab offers both ways to get one and lets the user say which;
+   * deciding for them is what made the old screen feel like it had an opinion
+   * about how you should travel.
+   *
+   * §3.3.0.1 gates the *automatic* path on four stamped places, so this is
+   * stricter than the rule, not looser. What the threshold still changes is
+   * what a suggestion is made of: above it the diary ranks, below it only the
+   * dataset's own signals do — curation, price, hours, distance — and the
+   * screen says which rather than dressing a guess up as personal.
+   * `suggestDay` is already pure about this: ranking with a thin diary is a
+   * meaningful thing to ask for, and the tests ask for it.
    */
-  const [wantsStarter, setWantsStarter] = useState(false);
+  const [wantsSuggestion, setWantsSuggestion] = useState(false);
 
   /**
    * What the user chose in Explore, in the order they chose it. The planner
@@ -100,7 +106,7 @@ export function PlanSuggestScreen() {
    */
   const suggestions = useMemo(
     () =>
-      startPlace && (enoughHistory || wantsStarter) && !hasSelection
+      startPlace && wantsSuggestion && !hasSelection
         ? suggestDay(
             // A dismissed place is out of the running entirely, not filtered
             // from the result: dropping it after the fact would leave a short
@@ -116,8 +122,7 @@ export function PlanSuggestScreen() {
         : [],
     [
       startPlace,
-      enoughHistory,
-      wantsStarter,
+      wantsSuggestion,
       hasSelection,
       visits,
       dayStartMin,
@@ -188,11 +193,18 @@ export function PlanSuggestScreen() {
   }
 
   /**
-   * Not enough diary to suggest from (§3.3.0.1). The button matters more than
-   * the words: a screen whose only content is text telling the user to be on
-   * a different tab is the worst-converting empty state there is.
+   * No plan yet: two ways to get one, and the tab asks rather than picks.
+   * Both routes stay one tap away — a screen whose only content is text
+   * telling the user to be on a different tab is the worst-converting empty
+   * state there is, and an auto-suggested day is the other failure, where the
+   * tab has already decided for someone who wanted to choose.
+   *
+   * Choosing your own places stays the primary because it is the one that
+   * always produces a day the user wants. The suggestion is secondary and its
+   * caption says what it is made of — above the threshold the diary, below it
+   * the map alone (§3.3.0.1), never a guess passed off as personal.
    */
-  if (!enoughHistory && !hasSelection && !wantsStarter) {
+  if (!hasSelection && !wantsSuggestion) {
     const visited = distinctPlacesVisited(visits);
     const remaining = SUGGESTION_HISTORY_THRESHOLD - visited;
     return (
@@ -202,11 +214,15 @@ export function PlanSuggestScreen() {
           size={26}
           color={colors.textMuted}
         />
-        <Text style={styles.emptyTitle}>Days get built from where you have been</Text>
+        <Text style={styles.emptyTitle}>
+          {enoughHistory ? 'Plan a day out' : 'Days get built from where you have been'}
+        </Text>
         <Text style={styles.emptyText}>
-          {visited === 0
-            ? `Stamp ${SUGGESTION_HISTORY_THRESHOLD} places you have visited and this tab starts suggesting days around them. Until then, pick the places you want and Plan will order them for you.`
-            : `${visited} place${visited === 1 ? '' : 's'} stamped. ${remaining} more and this tab starts suggesting days around them. Until then, pick the places you want and Plan will order them for you.`}
+          {enoughHistory
+            ? 'Pick the places you want and Plan will order them for you — or let it put a day together from where you have been.'
+            : visited === 0
+              ? `Stamp ${SUGGESTION_HISTORY_THRESHOLD} places you have visited and suggestions start coming from your diary. Until then, pick the places you want and Plan will order them for you.`
+              : `${visited} place${visited === 1 ? '' : 's'} stamped. ${remaining} more and suggestions start coming from your diary. Until then, pick the places you want and Plan will order them for you.`}
         </Text>
         <Pressable
           style={styles.primary}
@@ -215,15 +231,9 @@ export function PlanSuggestScreen() {
           <MaterialCommunityIcons name="compass-outline" size={16} color="#FFFFFF" />
           <Text style={styles.primaryText}>Find places</Text>
         </Pressable>
-        {/*
-          Opt-in, and deliberately secondary: picking your own places stays
-          the emphasis, and the caption says what a starter day is not —
-          §3.3.0.1 gates automatic suggestions on the diary precisely so a
-          guess is never passed off as personal.
-        */}
         <Pressable
           style={styles.secondary}
-          onPress={() => setWantsStarter(true)}
+          onPress={() => setWantsSuggestion(true)}
         >
           <MaterialCommunityIcons
             name="lightbulb-outline"
@@ -233,7 +243,9 @@ export function PlanSuggestScreen() {
           <Text style={styles.secondaryText}>Want a suggestion?</Text>
         </Pressable>
         <Text style={styles.secondaryHint}>
-          A starter day from the map — not from your diary yet.
+          {enoughHistory
+            ? 'A day built around the places you have stamped.'
+            : 'A starter day from the map — not from your diary yet.'}
         </Text>
       </View>
     );
