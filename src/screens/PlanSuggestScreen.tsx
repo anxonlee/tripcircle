@@ -285,17 +285,19 @@ export function PlanSuggestScreen() {
             />
           </Pressable>
         )}
-        <Text style={styles.title}>
-          {hasSelection ? 'Your places' : 'Plan a day out'}
-        </Text>
-        <Text style={styles.sub}>
-          {/* A starter day is the map's judgement, not the diary's — say so. */}
-          {hasSelection
-            ? `${dayItems.length} chosen · from ${startPlace.name}`
-            : enoughHistory
-              ? `Suggestions · from ${startPlace.name}`
-              : `A starter day · from ${startPlace.name}`}
-        </Text>
+        <View style={styles.headerText}>
+          <Text style={styles.title}>
+            {hasSelection ? 'Your places' : 'Plan a day out'}
+          </Text>
+          <Text style={styles.sub}>
+            {/* A starter day is the map's judgement, not the diary's — say so. */}
+            {hasSelection
+              ? `${dayItems.length} chosen · from ${startPlace.name}`
+              : enoughHistory
+                ? `Suggestions · from ${startPlace.name}`
+                : `A starter day · from ${startPlace.name}`}
+          </Text>
+        </View>
       </View>
 
       <View style={styles.mapWrap}>
@@ -462,13 +464,24 @@ function Stat({ label, value }: { label: string; value: string }) {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.surface },
   center: { alignItems: 'center', justifyContent: 'center', gap: 12, padding: 32 },
-  header: { paddingHorizontal: 16, paddingBottom: 10 },
-  /* Sits above the title, pulled left so the chevron's own bearing lines the
-     glyph up with the title's stem rather than its box. */
+  header: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingHorizontal: 16,
+    paddingBottom: 10,
+  },
+  headerText: { flex: 1 },
+  /*
+    Sits on the title's line, not above it: the 30pt tap target is taller
+    than the 17pt title, so it is pulled up by half the difference to put the
+    chevron's centre on the title's centre rather than the block's. The
+    negative left margin keeps the glyph optically at the 16pt margin — the
+    icon carries its own bearing, so aligning the box would look indented.
+  */
   back: {
-    alignSelf: 'flex-start',
-    marginLeft: -6,
-    marginBottom: 2,
+    marginLeft: -7,
+    marginRight: 1,
+    marginTop: -4,
     width: 30,
     height: 30,
     alignItems: 'center',
