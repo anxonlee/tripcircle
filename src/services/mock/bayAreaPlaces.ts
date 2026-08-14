@@ -63,9 +63,41 @@ const h = (hours: number, minutes = 0) => hours * 60 + minutes;
  * permanently closed: Philz Coffee Mission (3101 24th St, closed Oct 2023)
  * and Blue Bottle Coffee Mint Plaza. Venue status is volatile; this list
  * is a demo seed and will rot without a live provider behind PlacesService.
+ *
+ * Two entries were added on 2026-08-13 by request, and are weaker than the
+ * curated tier around them: street addresses and posted hours came from
+ * listings, but neither was geocoded through a geocoder — the coordinates
+ * are read off the address, so expect them to be right to the block rather
+ * than to the door. Both carry `hoursEstimated` for the reason given on
+ * each, which is not the flag's usual meaning of a per-theme default.
  */
 export const bayAreaPlaces: CuratedPlace[] = [
   // ——— Food ———
+  {
+    id: 'mas-dimsum-cafe',
+    name: "Ma's Dimsum & Cafe",
+    location: { latitude: 37.7981, longitude: -122.411 },
+    // 1315 Powell St, which is Chinatown at its North Beach edge. The
+    // district vocabulary has no Chinatown, and North Beach is the nearest
+    // label rather than the right one.
+    district: 'North Beach',
+    themes: ['food'],
+    priceLevel: 1,
+    priceBand: '$',
+    avgCostUsd: 18,
+    worthDetour: false,
+    /*
+      Posted 9:00-20:00 — but shut on Thursdays, and a weekly closure has
+      nowhere to live in `openHours`, which is one window for every day of
+      the week. Flagged estimated so the card hedges to "usually open"
+      instead of promising a Thursday it cannot keep. The honest fix is a
+      per-day schedule on CuratedPlace; this is the containment until then.
+    */
+    openHours: { open: h(9), close: h(20) },
+    hoursEstimated: true,
+    visitDurationMin: 45,
+    description: 'Clay pot rice and dim sum on Powell. Closed Thursdays.',
+  },
   {
     id: 'ferry-building',
     name: 'Ferry Building Marketplace',
@@ -224,6 +256,31 @@ export const bayAreaPlaces: CuratedPlace[] = [
   },
 
   // ——— Historical & museums ———
+  {
+    id: 'salesforce-tower',
+    name: 'Salesforce Tower',
+    location: { latitude: 37.7897, longitude: -122.3972 },
+    district: 'Downtown & SoMa',
+    // Not historical in any real sense — the theme vocabulary has no
+    // landmark or viewpoint, and this is the closest of the six.
+    themes: ['historical'],
+    priceLevel: 0,
+    priceBand: 'free',
+    avgCostUsd: 0,
+    worthDetour: false,
+    /*
+      The public part is the 61st-floor Ohana Floor, free, 11:00-18:00 — on
+      selected Saturdays only, by reservation, with no waitlist. A place
+      open one day a month cannot be said in a single daily window, so the
+      window here describes the tour and the flag makes the card hedge.
+      Treat the description as the real opening hours.
+    */
+    openHours: { open: h(11), close: h(18) },
+    hoursEstimated: true,
+    visitDurationMin: 60,
+    description:
+      'The 61st-floor Ohana Floor. Free, but selected Saturdays only and booked ahead.',
+  },
   {
     id: 'alcatraz-island',
     name: 'Alcatraz Island',
