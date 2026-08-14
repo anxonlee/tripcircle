@@ -141,22 +141,32 @@ export function PlacesScreen({ navigation }: Props) {
   }, [visiblePlaces, region, selectedIds, highlightedId]);
 
   /**
-   * The list, with a tapped pin's place lifted to the front.
+   * The list in three bands: the tapped pin, then the day being built, then
+   * everything else.
    *
-   * Tapping a dot has to put that place's card where the user can reach it,
-   * and at the stops where the map is worth tapping the sheet shows about
-   * one card. Sorting it to the top is the only move that survives the
-   * sheet's locked scroller, and it reads plainly: you asked about this one,
-   * so it is first.
+   * A tapped dot has to put its card where the user can reach it, and at the
+   * sheet stops where the map is worth tapping only about one card shows.
+   * Sorting is the only move that survives the sheet's locked scroller.
+   *
+   * The chosen places sit under it because they are the thing being made:
+   * the list is 441 long, and a day you have half-built should not need
+   * scrolling to find. It costs a card jumping to the top the moment it is
+   * ticked, which is movement under the finger that just tapped — accepted,
+   * because the alternative is picks scattered through 441 rows.
+   *
+   * Sort is stable, so each band keeps the order it already had rather than
+   * resequencing by when things were picked. Selection order does carry
+   * meaning — the planner treats it as the user's own arrangement — but
+   * reordering the list as someone taps would move cards they were not
+   * touching.
    */
   const listData = useMemo(() => {
-    if (!highlightedId) return visiblePlaces;
-    const i = visiblePlaces.findIndex((p) => p.id === highlightedId);
-    if (i <= 0) return visiblePlaces;
-    const copy = [...visiblePlaces];
-    const [hit] = copy.splice(i, 1);
-    return [hit, ...copy];
-  }, [visiblePlaces, highlightedId]);
+    const selected = new Set(selectedIds);
+    if (!highlightedId && selected.size === 0) return visiblePlaces;
+    const band = (p: CuratedPlace) =>
+      p.id === highlightedId ? 0 : selected.has(p.id) ? 1 : 2;
+    return [...visiblePlaces].sort((a, b) => band(a) - band(b));
+  }, [visiblePlaces, highlightedId, selectedIds]);
 
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const snapPoints = useMemo(() => ['30%', '55%', '88%'], []);
