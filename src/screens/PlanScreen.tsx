@@ -344,27 +344,39 @@ export function PlanScreen({ navigation }: Props) {
    * re-anchors to their own — and not a route, because a route computed from
    * someone else's doorstep is not a fact about theirs.
    *
-   * The stops come from `orderedPlaces` rather than `plan.stops`: the plan is
-   * a solved route whose sequence belongs to the optimiser, and when the user
-   * has arranged the day by hand it is their arrangement that should travel.
-   * With no arrangement the two are the same list anyway.
+   * The stops come from `plan.stops` — the sequence on screen — and NOT from
+   * `orderedPlaces`.
+   *
+   * `orderedPlaces` is the user's arrangement only once they have made one.
+   * Before that it is the order places were ticked in Explore, while the
+   * timeline shows whatever the optimiser chose, and a day out is a loop:
+   * A→B→C→home costs the same as C→B→A→home, so the solver takes the mirror
+   * about half the time. The link carried the ticked order, the recipient
+   * pinned it as an arrangement and so never re-solved, and two people with
+   * the same start place saw the same day backwards.
+   *
+   * With an arrangement the two are genuinely identical, because a fixed
+   * order is exactly what stops the optimiser resequencing. So reading the
+   * plan is right in both cases, and it is the honest rule besides: what
+   * travels is what the sender was looking at.
    */
   const shareDay = useCallback(async () => {
-    if (orderedPlaces.length === 0) return;
+    const shared = plan ? plan.stops.map((s) => s.place) : orderedPlaces;
+    if (shared.length === 0) return;
     const link = encodeDayLink({
       city: DATASET_CITY,
-      placeIds: orderedPlaces.map((p) => p.id),
+      placeIds: shared.map((p) => p.id),
       window: { dayStartMin, homeByMin },
       goal,
     });
-    const names = orderedPlaces.map((p) => p.name).join(' · ');
+    const names = shared.map((p) => p.name).join(' · ');
     // The names ride along as plain text because a pirtsf:// link renders as
     // nothing but its own scheme in most chat apps, and a friend who has not
     // installed the app yet should still be able to read what they were sent.
     await Share.share({
       message: `A day in the Bay Area: ${names}\n\nOpen in PIRT: ${link}`,
     });
-  }, [orderedPlaces, dayStartMin, homeByMin, goal]);
+  }, [plan, orderedPlaces, dayStartMin, homeByMin, goal]);
 
   /**
    * Hand the whole day to Google Maps.
