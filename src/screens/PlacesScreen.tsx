@@ -140,6 +140,24 @@ export function PlacesScreen({ navigation }: Props) {
       .slice(0, MAX_MARKERS);
   }, [visiblePlaces, region, selectedIds, highlightedId]);
 
+  /**
+   * The list, with a tapped pin's place lifted to the front.
+   *
+   * Tapping a dot has to put that place's card where the user can reach it,
+   * and at the stops where the map is worth tapping the sheet shows about
+   * one card. Sorting it to the top is the only move that survives the
+   * sheet's locked scroller, and it reads plainly: you asked about this one,
+   * so it is first.
+   */
+  const listData = useMemo(() => {
+    if (!highlightedId) return visiblePlaces;
+    const i = visiblePlaces.findIndex((p) => p.id === highlightedId);
+    if (i <= 0) return visiblePlaces;
+    const copy = [...visiblePlaces];
+    const [hit] = copy.splice(i, 1);
+    return [hit, ...copy];
+  }, [visiblePlaces, highlightedId]);
+
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const snapPoints = useMemo(() => ['30%', '55%', '88%'], []);
 
@@ -151,13 +169,43 @@ export function PlacesScreen({ navigation }: Props) {
     );
   };
 
-  const onMarkerPress = (p: CuratedPlace) => {
-    focusPlace(p);
-    const index = visiblePlaces.findIndex((x) => x.id === p.id);
-    if (index >= 0) {
-      sheetRef.current?.snapToIndex(1);
-      listRef.current?.scrollToIndex({ index, viewPosition: 0.15, animated: true });
+  /**
+   * Set by a pin tap, read by the map's own press handler.
+   *
+   * iOS delivers the background press as well as the marker's when a marker
+   * draws its own children, so clearing the highlight there wiped the name
+   * chip in the same frame it appeared: tapping a dot moved the map and told
+   * you nothing. The pin's tap wins, and the flag is dropped immediately so
+   * the next press on open map still clears.
+   */
+  const pinTapped = useRef(false);
+
+  const onMapPress = () => {
+    if (pinTapped.current) {
+      pinTapped.current = false;
+      return;
     }
+    setHighlighted(null);
+  };
+
+  /**
+   * Tapping a dot answers "what is this?" and offers "add it" — the name on
+   * the pin, and the place's own card brought under it.
+   *
+   * The sheet drops to its shortest stop first: at the middle stop it covers
+   * the point the pin's name chip hangs in, so the answer to "what is this?"
+   * arrives underneath the thing asking.
+   *
+   * The card is brought to the user by sorting, not by scrolling. This sheet
+   * locks its own scroller at every stop below the tallest — that is how it
+   * hands the drag gesture back to the sheet — so `scrollToIndex` is inert
+   * at exactly the heights where the map is visible enough to tap a pin at
+   * all. It reported a valid ref and a real function and moved nothing.
+   */
+  const onMarkerPress = (p: CuratedPlace) => {
+    pinTapped.current = true;
+    focusPlace(p);
+    sheetRef.current?.snapToIndex(0);
   };
 
   return (
@@ -167,7 +215,7 @@ export function PlacesScreen({ navigation }: Props) {
         style={StyleSheet.absoluteFill}
         initialRegion={BAY_AREA_REGION}
         mapPadding={{ top: insets.top + 90, left: 0, right: 0, bottom: 240 }}
-        onPress={() => setHighlighted(null)}
+        onPress={onMapPress}
         onRegionChangeComplete={setRegion}
       >
         {startPlace && (
@@ -271,7 +319,7 @@ export function PlacesScreen({ navigation }: Props) {
         </View>
         <BottomSheetFlatList
           ref={listRef as never}
-          data={visiblePlaces}
+          data={listData}
           keyExtractor={(p: CuratedPlace) => p.id}
           getItemLayout={(_: unknown, index: number) => ({
             length: CARD_HEIGHT + CARD_GAP,
