@@ -9,6 +9,7 @@ import {
   Linking,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   useWindowDimensions,
@@ -36,6 +37,7 @@ import {
   googleMapsStopUrl,
   waypointLimit,
 } from '../lib/maps';
+import { DATASET_CITY, encodeDayLink } from '../lib/tripLink';
 import {
   optimizeDay,
   type DayPlan,
@@ -332,6 +334,37 @@ export function PlanScreen({ navigation }: Props) {
     },
     [selectedIds.length, togglePlace]
   );
+
+  /**
+   * Share the day as a link another copy of the app can adopt.
+   *
+   * What goes in the message is the day in the order it is on screen, and
+   * nothing else. Not the start place — a start place plus a day out says
+   * where someone lives and when they are not home, and the recipient
+   * re-anchors to their own — and not a route, because a route computed from
+   * someone else's doorstep is not a fact about theirs.
+   *
+   * The stops come from `orderedPlaces` rather than `plan.stops`: the plan is
+   * a solved route whose sequence belongs to the optimiser, and when the user
+   * has arranged the day by hand it is their arrangement that should travel.
+   * With no arrangement the two are the same list anyway.
+   */
+  const shareDay = useCallback(async () => {
+    if (orderedPlaces.length === 0) return;
+    const link = encodeDayLink({
+      city: DATASET_CITY,
+      placeIds: orderedPlaces.map((p) => p.id),
+      window: { dayStartMin, homeByMin },
+      goal,
+    });
+    const names = orderedPlaces.map((p) => p.name).join(' · ');
+    // The names ride along as plain text because a pirtsf:// link renders as
+    // nothing but its own scheme in most chat apps, and a friend who has not
+    // installed the app yet should still be able to read what they were sent.
+    await Share.share({
+      message: `A day in the Bay Area: ${names}\n\nOpen in PIRT: ${link}`,
+    });
+  }, [orderedPlaces, dayStartMin, homeByMin, goal]);
 
   /**
    * Hand the whole day to Google Maps.
@@ -704,6 +737,7 @@ export function PlanScreen({ navigation }: Props) {
         handleIndicatorStyle={styles.handle}
       >
         <View style={styles.sheetTop}>
+          <View style={styles.sheetHeaderRow}>
           <View style={styles.sheetHeaderText}>
             <Text style={styles.sheetTitle}>Day plan</Text>
             <Text style={styles.sheetContext}>From {startPlace.name}</Text>
@@ -731,6 +765,29 @@ export function PlanScreen({ navigation }: Props) {
                 </View>
               )}
             </View>
+          </View>
+          {/*
+            Share sits up here rather than in the action row below. That row
+            is Start day plus Maps already, and a third control there would
+            crowd the narrowest phone likely to receive a link.
+
+            Icon only, and no label to grow: it is beside a heading that
+            already says what the sheet is, and the share sheet names the
+            action the moment it opens.
+          */}
+          <Pressable
+            style={styles.shareBtn}
+            onPress={shareDay}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Share this day as a link"
+          >
+            <MaterialCommunityIcons
+              name="tray-arrow-up"
+              size={18}
+              color={colors.textSecondary}
+            />
+          </Pressable>
           </View>
           {/*
             Four objectives, four columns, all on screen. This was a
@@ -1103,7 +1160,23 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
     gap: 10,
   },
-  sheetHeaderText: {},
+  /* Heading and share, one line: the button aligns to the top so it sits
+     against the title rather than floating beside the window control. */
+  sheetHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  sheetHeaderText: { flex: 1 },
+  shareBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceInput,
+  },
   sheetTitle: { fontSize: 17, fontWeight: '500', color: colors.textPrimary },
   sheetContext: { fontSize: 12, color: colors.textMuted, marginTop: 1 },
   /**

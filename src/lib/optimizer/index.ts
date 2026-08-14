@@ -45,7 +45,18 @@ const usually = (p: CuratedPlace): string => (p.hoursEstimated ? 'usually ' : ''
  * more attractive, not less. It needs its own penalty term — see
  * `walkPenaltyMin`.
  */
-export type Goal = 'economic' | 'balanced' | 'fastest' | 'leastWalking';
+export const GOALS = ['economic', 'balanced', 'fastest', 'leastWalking'] as const;
+
+export type Goal = (typeof GOALS)[number];
+
+/**
+ * Narrows an unknown to a Goal. Written here beside the list so a link, a
+ * stored value, or anything else arriving from outside the app is checked
+ * against the same four the optimiser actually solves for.
+ */
+export function isGoal(value: unknown): value is Goal {
+  return typeof value === 'string' && (GOALS as readonly string[]).includes(value);
+}
 
 export type LegOptionsFn = (from: LatLng, to: LatLng) => LegEstimate[];
 

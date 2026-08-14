@@ -7,6 +7,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
+import { useSharedDayLink } from './src/hooks/useSharedDayLink';
 import { TabBar } from './src/components/TabBar';
 import type { RootStackParamList, TabParamList } from './src/navigation';
 import { DiaryScreen } from './src/screens/DiaryScreen';
@@ -69,10 +70,17 @@ export default function App() {
   const hydrated = useHydrated();
   const hasStartPlace = useTripStore((s) => s.startPlace !== null);
 
+  /*
+    Above the splash return, because hooks cannot be conditional and because
+    a link that arrives during a cold start arrives *now* — before the first
+    frame. The hook waits for the store itself rather than for this screen.
+  */
+  useSharedDayLink();
+
   if (!hydrated) {
     return (
       <View style={styles.splash}>
-        <Text style={styles.splashBrand}>TripCircle</Text>
+        <Text style={styles.splashBrand}>PIRT</Text>
       </View>
     );
   }
