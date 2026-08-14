@@ -82,7 +82,20 @@ export function useSharedDayLink(): void {
 
       const { placeIds, window, goal } = result.day;
       const missing = unresolvedCount(url, known);
-      const existing = useTripStore.getState().selectedPlaceIds.length;
+      const { selectedPlaceIds, startDayStep } = useTripStore.getState();
+      const existing = selectedPlaceIds.length;
+      /**
+       * Adopting calls `setSelection`, which sends Start day back to its
+       * first stop — so a link arriving mid-outing quietly ends the outing.
+       * That is a bigger loss than the selection and it was not being named.
+       *
+       * `startDayStep > 0` is the whole signal there is: step zero is both
+       * "not started" and "standing at the first stop", and the two are not
+       * distinguishable here. Warning at zero would mean warning every
+       * recipient about a day they never began, so the check errs towards
+       * silence and only speaks once someone has visibly moved through one.
+       */
+      const midOuting = startDayStep > 0;
 
       const lines = [
         `${placeIds.length} ${placeIds.length === 1 ? 'place' : 'places'}, planned from ${formatMin(window.dayStartMin)} to ${formatMin(window.homeByMin)}.`,
@@ -90,6 +103,11 @@ export function useSharedDayLink(): void {
         // short with no explanation reads as the sender's mistake.
         missing > 0
           ? `${missing} ${missing === 1 ? 'stop is' : 'stops are'} not in your places and will be left out.`
+          : null,
+        // First of the two losses, because it is the one that cannot be
+        // undone by picking the places again.
+        midOuting
+          ? 'You are partway through a day out. Opening this ends it and starts the new one from the beginning.'
           : null,
         existing > 0
           ? `This replaces the ${existing} ${existing === 1 ? 'place' : 'places'} you have selected.`
