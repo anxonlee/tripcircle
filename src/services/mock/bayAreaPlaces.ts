@@ -64,12 +64,18 @@ const h = (hours: number, minutes = 0) => hours * 60 + minutes;
  * and Blue Bottle Coffee Mint Plaza. Venue status is volatile; this list
  * is a demo seed and will rot without a live provider behind PlacesService.
  *
- * Two entries were added on 2026-08-13 by request, and are weaker than the
- * curated tier around them: street addresses and posted hours came from
- * listings, but neither was geocoded through a geocoder — the coordinates
- * are read off the address, so expect them to be right to the block rather
- * than to the door. Both carry `hoursEstimated` for the reason given on
- * each, which is not the flag's usual meaning of a per-theme default.
+ * Two entries were added on 2026-08-13 by request — Ma's Dimsum & Cafe and
+ * Salesforce Park — and are weaker than the curated tier around them:
+ * street addresses and posted hours came from listings and operator pages,
+ * but neither was put through a geocoder. The coordinates are read off the
+ * address, so expect them right to the block rather than to the door.
+ *
+ * Salesforce Tower was added and withdrawn the same day. Its public part is
+ * the 61st-floor Ohana Floor, which opens on selected Saturdays by
+ * reservation — a place open one day a month cannot be stated in a single
+ * daily window, and dressing it as one would have had the app announce it
+ * open on a Tuesday. The park on the transit centre roof is the thing
+ * nearby that is genuinely open daily, and it is in the list instead.
  */
 export const bayAreaPlaces: CuratedPlace[] = [
   // ——— Food ———
@@ -257,31 +263,6 @@ export const bayAreaPlaces: CuratedPlace[] = [
 
   // ——— Historical & museums ———
   {
-    id: 'salesforce-tower',
-    name: 'Salesforce Tower',
-    location: { latitude: 37.7897, longitude: -122.3972 },
-    district: 'Downtown & SoMa',
-    // Not historical in any real sense — the theme vocabulary has no
-    // landmark or viewpoint, and this is the closest of the six.
-    themes: ['historical'],
-    priceLevel: 0,
-    priceBand: 'free',
-    avgCostUsd: 0,
-    worthDetour: false,
-    /*
-      The public part is the 61st-floor Ohana Floor, free, 11:00-18:00 — on
-      selected Saturdays only, by reservation, with no waitlist. A place
-      open one day a month cannot be said in a single daily window, so the
-      window here describes the tour and the flag makes the card hedge.
-      Treat the description as the real opening hours.
-    */
-    openHours: { open: h(11), close: h(18) },
-    hoursEstimated: true,
-    visitDurationMin: 60,
-    description:
-      'The 61st-floor Ohana Floor. Free, but selected Saturdays only and booked ahead.',
-  },
-  {
     id: 'alcatraz-island',
     name: 'Alcatraz Island',
     location: { latitude: 37.82672, longitude: -122.42276 },
@@ -409,6 +390,29 @@ export const bayAreaPlaces: CuratedPlace[] = [
   },
 
   // ——— Nature & views ———
+  {
+    id: 'salesforce-park',
+    name: 'Salesforce Park',
+    location: { latitude: 37.7896, longitude: -122.3962 },
+    district: 'Downtown & SoMa',
+    themes: ['nature'],
+    priceLevel: 0,
+    priceBand: 'free',
+    avgCostUsd: 0,
+    worthDetour: false,
+    /*
+      Really 6:00-21:00 from May to October and 6:00-20:00 from November to
+      April. The narrower window is the one recorded, because the schema
+      holds one window per place and understating a closing time only ever
+      sends someone earlier than they needed to go. No `hoursEstimated`:
+      these are the operator's own hours, and unlike a weekly closure a
+      seasonal hour cannot make the app claim open on a day that is shut.
+    */
+    openHours: { open: h(6), close: h(20) },
+    visitDurationMin: 45,
+    description:
+      'A 5.4-acre park on the transit centre roof — gardens, an amphitheatre, and a free gondola up.',
+  },
   {
     id: 'golden-gate-bridge',
     name: 'Golden Gate Bridge',
