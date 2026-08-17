@@ -320,12 +320,43 @@ export function PlacesScreen({ navigation }: Props) {
         handleIndicatorStyle={styles.handle}
       >
         <View style={styles.sheetHeader}>
-          <Text style={styles.sheetTitle}>Your day out</Text>
-          <Text style={styles.sheetContext}>
-            {selectedIds.length > 0
-              ? `${selectedIds.length} of ${places.length} places selected`
-              : 'Pick a few places, then tap the map button below to plan'}
-          </Text>
+          <View style={styles.sheetHeaderText}>
+            <Text style={styles.sheetTitle}>Your day out</Text>
+            <Text style={styles.sheetContext} numberOfLines={1}>
+              {/*
+                The old copy sent people to "the map button below to plan",
+                which is the tab bar's centre button — and that one stamps a
+                visit. It named a route that never existed.
+              */}
+              {selectedIds.length === 0
+                ? 'Pick a couple of places and plan the day here'
+                : selectedIds.length === 1
+                  ? `1 of ${places.length} selected · one more to plan`
+                  : `${selectedIds.length} of ${places.length} places selected`}
+            </Text>
+          </View>
+          {/*
+            Planning finishes where choosing finishes. The day was reachable
+            only by leaving for the Plan tab and pressing its button, which
+            is a second screen asking the same question the user has already
+            answered here.
+
+            Two, because the optimiser has nothing to order with one stop —
+            the same floor the Plan tab enforces. Below that the button is
+            absent rather than disabled: a control that cannot be pressed
+            says less than the line beside it, which names what is missing.
+          */}
+          {selectedIds.length >= 2 && (
+            <Pressable
+              style={styles.planBtn}
+              onPress={() => navigation.navigate('DayPlan')}
+              accessibilityRole="button"
+              accessibilityLabel={`Plan the day with your ${selectedIds.length} places`}
+            >
+              <MaterialCommunityIcons name="map-outline" size={15} color="#FFFFFF" />
+              <Text style={styles.planBtnText}>Plan {selectedIds.length}</Text>
+            </Pressable>
+          )}
         </View>
         <BottomSheetFlatList
           ref={listRef as never}
@@ -469,11 +500,26 @@ const styles = StyleSheet.create({
   },
   handle: { backgroundColor: colors.borderStrong, width: 36, height: 4 },
   sheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
     paddingHorizontal: 16,
     paddingBottom: 10,
   },
+  sheetHeaderText: { flex: 1 },
   sheetTitle: { fontSize: 17, fontWeight: '500', color: colors.textPrimary },
   sheetContext: { fontSize: 12, color: colors.textMuted, marginTop: 1 },
+  /* Clay, because it is the one thing on this screen that finishes the job. */
+  planBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    height: 34,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    backgroundColor: colors.accent,
+  },
+  planBtnText: { fontSize: 13, fontWeight: '500', color: '#FFFFFF' },
   emptyWrap: { alignItems: 'center', gap: 6, paddingTop: 32 },
   emptyText: { fontSize: 13, color: colors.textMuted },
 });
