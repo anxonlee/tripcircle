@@ -120,6 +120,15 @@ export interface CuratedPlace {
    * a planner must not present a guessed window as fact.
    */
   hoursEstimated?: boolean;
+  /**
+   * Present only on places the user added for themselves (lib/myPlace.ts).
+   *
+   * Optional so the seed dataset stays untouched, and read rather than
+   * inferred: the UI has to be able to show which places came from the
+   * dataset and which the user typed in, and any external description of the
+   * dataset has to be able to exclude them.
+   */
+  source?: 'mine';
   /** OpenStreetMap object this record came from, e.g. "node/7025326100". */
   osmRef?: string;
   description?: string;
