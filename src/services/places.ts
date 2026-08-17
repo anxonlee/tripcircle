@@ -1,6 +1,8 @@
 import { config } from '../config';
 import { haversineKm } from '../lib/geo';
 import type { Landmark, LatLng, CuratedPlace } from '../domain/types';
+import { mergePlaces } from '../lib/myPlace';
+import { useMyPlacesStore, visibleMyPlaces } from '../store/useMyPlacesStore';
 import { bayAreaLandmarks } from './mock/landmarks';
 import { bayAreaPlaces } from './mock/bayAreaPlaces';
 
@@ -63,6 +65,57 @@ class MockPlacesService implements PlacesService {
 export const mockPlacesService: PlacesService = new MockPlacesService();
 
 /**
+ * Adds the user's own places to whatever the provider knows.
+ *
+ * A wrapper rather than an edit to each implementation: it has to apply to
+ * the mock and to Google alike, and screens must not have to remember to ask
+ * two sources. Every screen already reaches place data through this boundary,
+ * so nothing above it changes.
+ *
+ * The store is read imperatively rather than subscribed to. This is a service,
+ * not a component, and a place added mid-session is picked up by the next
+ * call — which is the next time a screen mounts or the selection changes.
+ */
+function withMyPlaces(inner: PlacesService): PlacesService {
+  const mine = () => visibleMyPlaces(useMyPlacesStore.getState().places);
+  const matches = (p: CuratedPlace, q: string) =>
+    p.name.toLowerCase().includes(q);
+
+  return {
+    // Start places are landmarks, and stay that way. A landmark is public by
+    // design (PRD §3.1) — the whole point is that it is not your address —
+    // and a place the user typed in is exactly the kind of thing that is.
+    searchLandmarks: (query) => inner.searchLandmarks(query),
+
+    async listPlaces() {
+      return mergePlaces(await inner.listPlaces(), mine());
+    },
+
+    async getPlace(id) {
+      // Asked first, so a hidden place still resolves for the diary: a stamp
+      // against a place put away last week must not lose its name.
+      const own = useMyPlacesStore.getState().places.find((p) => p.id === id);
+      return own ?? inner.getPlace(id);
+    },
+
+    async searchPlaces(query, near) {
+      const q = query.trim().toLowerCase();
+      const own = q ? mine().filter((p) => matches(p, q)) : mine();
+      return mergePlaces(await inner.searchPlaces(query, near), own);
+    },
+
+    async nearbyPlaces(to, limitKm = 1.5) {
+      const own = mine().filter((p) => haversineKm(to, p.location) <= limitKm);
+      // Nearby is ordered by distance and merging would break that, so the
+      // combined list is re-sorted rather than concatenated.
+      return mergePlaces(await inner.nearbyPlaces(to, limitKm), own).sort(
+        (a, b) => haversineKm(to, a.location) - haversineKm(to, b.location)
+      );
+    },
+  };
+}
+
+/**
  * App-wide singleton. Swap the implementation here, nowhere else.
  * The real provider engages only when a Google key (or proxy) is configured,
  * so the app stays fully usable on mock data during development.
@@ -75,7 +128,9 @@ function resolvePlacesService(): PlacesService {
   return new GooglePlacesService();
 }
 
-export const placesService: PlacesService = resolvePlacesService();
+// Wrapped outside the resolver so the user's own places survive the day a
+// key is configured and the provider underneath changes.
+export const placesService: PlacesService = withMyPlaces(resolvePlacesService());
 
 /** True when place search hits a live provider rather than the curated list. */
 export const placeSearchIsLive = config.useRealProviders;
