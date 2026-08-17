@@ -121,14 +121,23 @@ export interface CuratedPlace {
    */
   hoursEstimated?: boolean;
   /**
-   * Present only on places the user added for themselves (lib/myPlace.ts).
+   * Where the record came from, when it did not come from the seed list.
    *
-   * Optional so the seed dataset stays untouched, and read rather than
-   * inferred: the UI has to be able to show which places came from the
-   * dataset and which the user typed in, and any external description of the
-   * dataset has to be able to exclude them.
+   * `mine` is a place the user added for themselves (lib/myPlace.ts); `osm`
+   * is one found live through Overpass (lib/osmPlace.ts). Optional so the
+   * seed dataset stays untouched, and read rather than inferred: the UI has
+   * to be able to show which places the app vouches for and which it merely
+   * found, and any external description of the dataset has to exclude both.
    */
-  source?: 'mine';
+  source?: 'mine' | 'osm';
+  /**
+   * True when `priceBand` is a placeholder rather than an assessment.
+   *
+   * OSM records no price, so a place found live has none. The band still has
+   * to hold a value because the type requires one; this is what stops the UI
+   * printing it as though it meant something.
+   */
+  priceEstimated?: boolean;
   /** OpenStreetMap object this record came from, e.g. "node/7025326100". */
   osmRef?: string;
   description?: string;
