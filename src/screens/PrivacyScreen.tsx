@@ -117,6 +117,11 @@ const POINTS: Point[] = [
     body: 'The app does not measure how you use it and contains no advertising or tracking code.',
   },
   {
+    icon: 'alert-circle-outline',
+    title: 'Crashes are written down, not sent',
+    body: 'When something breaks, the app saves the error, where in the code it happened, and which build you are on — on this phone, and only the last few. Nothing is transmitted. If you want us to see it, Settings offers it to the share sheet and you choose where it goes. Your diary is never part of it.',
+  },
+  {
     icon: 'tray-arrow-up',
     title: 'Backups go where you send them',
     body: 'A backup contains your visits and photos. Attached photos are re-encoded to strip the camera metadata, so the coordinates and capture time do not travel with them. Once you share the file, it follows that service’s rules — treat it like any personal document.',

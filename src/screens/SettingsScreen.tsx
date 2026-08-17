@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { CompositeNavigationProp } from '@react-navigation/native';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { File } from 'expo-file-system';
 import React, { useState } from 'react';
@@ -17,6 +17,9 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { SuggestionBias } from '../lib/planner';
 import type { RootStackParamList, TabParamList } from '../navigation';
+import { appBuildMeta } from '../lib/appMeta';
+import { formatReport } from '../lib/crashReport';
+import { clearCrashLog, readCrashLog } from '../services/crashLog';
 import { exportDiary, importDiary } from '../services/diaryBackup';
 import { useDiaryStore } from '../store/useDiaryStore';
 import { useTripStore } from '../store/useTripStore';
@@ -63,6 +66,40 @@ export function SettingsScreen() {
   const visits = useDiaryStore((s) => s.visits);
   const replaceVisits = useDiaryStore((s) => s.replaceVisits);
   const [busy, setBusy] = useState(false);
+  /**
+   * How many problems are waiting to be sent. Counted on focus rather than
+   * held in a store: it changes only when something goes wrong, and a crash
+   * has better things to do than notify a settings screen.
+   */
+  const [crashes, setCrashes] = useState(0);
+  useFocusEffect(
+    React.useCallback(() => {
+      let alive = true;
+      void readCrashLog().then((log) => {
+        if (alive) setCrashes(log.length);
+      });
+      return () => {
+        alive = false;
+      };
+    }, [])
+  );
+
+  /**
+   * The whole of "crash reporting" in this app: the user hands it over.
+   * Nothing is transmitted on its own — the share sheet is the only way out,
+   * which is what lets the privacy page keep saying the app carries no
+   * reporting SDK.
+   */
+  const onSendCrashes = async () => {
+    const log = await readCrashLog();
+    if (log.length === 0) return;
+    await Share.share({ message: formatReport(log, appBuildMeta()) });
+    // Cleared only after the sheet closes, and deliberately without asking:
+    // a report kept after sending gets sent twice, and the second one reads
+    // as a second crash.
+    await clearCrashLog();
+    setCrashes(0);
+  };
 
   const onExport = async () => {
     setBusy(true);
@@ -177,6 +214,31 @@ export function SettingsScreen() {
           Saved on this device only. Until accounts arrive, a file you keep is
           the only thing between you and losing the diary with the app.
         </Text>
+
+        {/*
+          Absent when nothing has gone wrong, rather than present and empty.
+          A permanent "Problems: 0" invites people to go looking for trouble,
+          and the row only means anything on the day it appears.
+        */}
+        {crashes > 0 && (
+          <>
+            <Text style={styles.groupLabel}>Problems</Text>
+            <View style={styles.card}>
+              <Row
+                icon="alert-circle-outline"
+                label="Send what went wrong"
+                value={`${crashes}`}
+                onPress={onSendCrashes}
+              />
+            </View>
+            <Text style={styles.groupNote}>
+              {crashes === 1 ? 'One problem was' : `${crashes} problems were`}{' '}
+              recorded on this phone. Nothing is sent until you send it, and
+              the report carries the error and the build only — never your
+              diary.
+            </Text>
+          </>
+        )}
 
         <Text style={styles.groupLabel}>Privacy</Text>
         <View style={styles.card}>

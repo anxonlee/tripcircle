@@ -7,6 +7,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
+import { installGlobalErrorHandler } from './src/services/crashLog';
 import { useSharedDayLink } from './src/hooks/useSharedDayLink';
 import { TabBar } from './src/components/TabBar';
 import type { RootStackParamList, TabParamList } from './src/navigation';
@@ -24,6 +25,12 @@ import { SettingsScreen } from './src/screens/SettingsScreen';
 import { useDiaryStore } from './src/store/useDiaryStore';
 import { useTripStore } from './src/store/useTripStore';
 import { colors } from './src/theme/colors';
+
+/*
+  At module scope, not in an effect: an error thrown while the first screen
+  mounts happens before any effect runs, and those are the ones worth having.
+*/
+installGlobalErrorHandler();
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<TabParamList>();
