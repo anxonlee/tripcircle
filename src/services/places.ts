@@ -2,7 +2,9 @@ import { config } from '../config';
 import { haversineKm } from '../lib/geo';
 import type { Landmark, LatLng, CuratedPlace } from '../domain/types';
 import { mergePlaces } from '../lib/myPlace';
+import { useFoundPlacesStore } from '../store/useFoundPlacesStore';
 import { useMyPlacesStore, visibleMyPlaces } from '../store/useMyPlacesStore';
+import { searchOsm } from './osm/search';
 import { bayAreaLandmarks } from './mock/landmarks';
 import { bayAreaPlaces } from './mock/bayAreaPlaces';
 
@@ -128,12 +130,68 @@ function resolvePlacesService(): PlacesService {
   return new GooglePlacesService();
 }
 
-// Wrapped outside the resolver so the user's own places survive the day a
-// key is configured and the provider underneath changes.
-export const placesService: PlacesService = withMyPlaces(resolvePlacesService());
+/**
+ * Live search against OpenStreetMap, for builds with no Google key.
+ *
+ * The gap a key was going to fix is search: without one the app knows 441
+ * places and nothing else. OpenStreetMap closes that for nothing — no
+ * account, no card — so it is layered on whenever Google is not configured.
+ * With a key, Google's own index is better and this stays out of the way.
+ *
+ * Results are remembered, which is not optional. A place that exists only in
+ * a results list can be selected and then cease to exist on the next launch,
+ * taking the stop out of the day and turning any stamp against it into a
+ * place PIRT no longer has.
+ */
+function withOsmSearch(inner: PlacesService): PlacesService {
+  const found = () => useFoundPlacesStore.getState().places;
 
-/** True when place search hits a live provider rather than the curated list. */
-export const placeSearchIsLive = config.useRealProviders;
+  return {
+    searchLandmarks: (query) => inner.searchLandmarks(query),
+
+    async listPlaces() {
+      const all = await inner.listPlaces();
+      const seen = new Set(all.map((p) => p.id));
+      return [...all, ...found().filter((p) => !seen.has(p.id))];
+    },
+
+    async getPlace(id) {
+      return (await inner.getPlace(id)) ?? found().find((p) => p.id === id);
+    },
+
+    async searchPlaces(query, near) {
+      const local = await inner.searchPlaces(query, near);
+      // The built-in list answers first and always. Overpass is what happens
+      // when it has nothing to say, and it must never cost the user the
+      // results they would have had.
+      const reference = await inner.listPlaces();
+      const remote = await searchOsm(query, near, reference);
+      if (remote.length > 0) useFoundPlacesStore.getState().remember(remote);
+      const seen = new Set(local.map((p) => p.id));
+      return [...local, ...remote.filter((p) => !seen.has(p.id))];
+    },
+
+    nearbyPlaces: (to, limitKm) => inner.nearbyPlaces(to, limitKm),
+  };
+}
+
+// Composed outermost-first: the user's own places sit above whatever found
+// them, and both survive the day a key is configured and the provider
+// underneath changes.
+export const placesService: PlacesService = withMyPlaces(
+  config.useRealProviders
+    ? resolvePlacesService()
+    : withOsmSearch(resolvePlacesService())
+);
+
+/**
+ * True when the search box reaches past the built-in list.
+ *
+ * Now true in every build: without a Google key, Overpass answers instead.
+ * The screens read this to decide whether typing is worth a round trip, and
+ * a false here would leave the free provider switched off and unused.
+ */
+export const placeSearchIsLive = true;
 
 /**
  * Every place a stored visit could name, including ones put away.

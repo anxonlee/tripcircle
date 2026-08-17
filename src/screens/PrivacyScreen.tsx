@@ -85,14 +85,24 @@ const MAP_POINT: Point =
       };
 
 /**
- * Shown only when this build is configured to reach Google (see src/config).
- * Without a key the app runs entirely on its built-in place list and its own
- * travel estimates, and nothing here would be true.
+ * Which of these is true depends on how the build is configured (src/config).
+ *
+ * With a Google key, searching goes to Google and travel times are real.
+ * Without one — the usual case — searching goes to OpenStreetMap and travel
+ * times stay as the app's own estimates. Saying the
+ * wrong one would be a false statement about where a user's typing goes,
+ * which is the one thing this screen exists to get right.
  */
 const PROVIDER_POINT: Point = {
   icon: 'cloud-search-outline',
   title: 'Searching asks Google',
   body: 'This build looks places up through Google. Searching sends what you type, and roughly where you are searching, so it can answer. Planning a day sends the locations of your stops so the travel times are real ones. Your diary is never part of that. Ratings and opening hours that come back are shown while you are looking at them and are not saved.',
+};
+
+const OSM_POINT: Point = {
+  icon: 'map-search-outline',
+  title: 'Searching asks OpenStreetMap',
+  body: 'Beyond its built-in list, the app searches OpenStreetMap through a public search service. Searching sends what you type and the area around your starting point, so it can answer. Nothing else goes with it — not your diary, not where you have been. Places it finds are kept on this phone so a day you planned still makes sense later. Place data © OpenStreetMap contributors, available under the Open Database Licence.',
 };
 
 const POINTS: Point[] = [
@@ -127,7 +137,7 @@ const POINTS: Point[] = [
     body: 'A backup contains your visits and photos. Attached photos are re-encoded to strip the camera metadata, so the coordinates and capture time do not travel with them. Once you share the file, it follows that service’s rules — treat it like any personal document.',
   },
   MAP_POINT,
-  ...(config.useRealProviders ? [PROVIDER_POINT] : []),
+  ...(config.useRealProviders ? [PROVIDER_POINT] : [OSM_POINT]),
 ];
 
 export function PrivacyScreen({ navigation }: Props) {
