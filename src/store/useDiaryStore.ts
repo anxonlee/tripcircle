@@ -25,6 +25,11 @@ import { deleteVisitPhoto } from '../services/photoStore';
 /** Everything a stamp can carry beyond the required answer. */
 export interface StampDraft {
   placeId: string;
+  /**
+   * Carried so the visit stays readable if the place ever stops existing.
+   * The screen has it in hand; asking later may find nothing.
+   */
+  placeName: string;
   wouldGoAgain: WouldGoAgain;
   rating?: number;
   note?: string;
@@ -55,6 +60,7 @@ export const useDiaryStore = create<DiaryState>()(
         const visit: Visit = {
           id: newVisitId(),
           placeId: draft.placeId,
+          placeName: draft.placeName,
           timestamp: Date.now(),
           wouldGoAgain: draft.wouldGoAgain,
           ...(draft.rating != null ? { rating: draft.rating } : {}),

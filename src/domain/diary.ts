@@ -9,6 +9,7 @@
  * alongside it — a stored counter is a counter that drifts.
  */
 
+import { LEGACY_PLACE_NAMES } from './legacyPlaceNames';
 import type { CuratedPlace } from './types';
 
 /**
@@ -37,6 +38,22 @@ export interface Visit {
   id: string;
   /** References CuratedPlace.id. */
   placeId: string;
+  /**
+   * The place's name as it stood when the visit was stamped.
+   *
+   * Denormalised deliberately, against the usual instinct. A visit is a
+   * record of something that happened, and it must stay readable when the
+   * thing it points at is gone — a place the user removed, an id a provider
+   * retired, or a whole dataset swapped underneath it, which is exactly what
+   * happened when Hong Kong became the Bay Area and every stamp before the
+   * switch turned into "Unknown place".
+   *
+   * The live record still wins when there is one, so a place that is renamed
+   * reads by its current name. This is the floor, not the source of truth.
+   *
+   * Optional because visits written before it existed do not have it.
+   */
+  placeName?: string;
   /** Epoch ms, captured automatically at stamp time. */
   timestamp: number;
   wouldGoAgain: WouldGoAgain;
@@ -171,6 +188,45 @@ export interface WallCard {
   place: CuratedPlace;
   stats: PlaceStats;
   latestVisit: Visit;
+}
+
+/**
+ * What to call the place a visit points at.
+ *
+ * Four sources, in order of how much they can be trusted:
+ *
+ *  1. The live record, so a renamed place reads by its current name.
+ *  2. The name the visit stored for itself when it was stamped.
+ *  3. The archive of names this build no longer carries.
+ *  4. An admission.
+ *
+ * The last one is deliberately not "Unknown place". The place is not
+ * unknown — the person standing in it knew exactly where they were, and
+ * telling them otherwise makes the app look like it lost their day rather
+ * than merely lost a name.
+ */
+export const FORGOTTEN_PLACE_LABEL = 'A place PIRT no longer has';
+
+export function visitPlaceName(
+  visit: Visit,
+  place: CuratedPlace | undefined
+): string {
+  // Blank is as absent as missing. `??` alone would hand back an empty
+  // string and render a nameless row, which is worse than admitting the loss.
+  const first = [
+    place?.name,
+    visit.placeName,
+    LEGACY_PLACE_NAMES[visit.placeId],
+  ].find((n) => typeof n === 'string' && n.trim().length > 0);
+  return first?.trim() ?? FORGOTTEN_PLACE_LABEL;
+}
+
+/** True when nothing beyond a name survives — no location, no themes. */
+export function visitPlaceIsForgotten(
+  visit: Visit,
+  place: CuratedPlace | undefined
+): boolean {
+  return !place;
 }
 
 export function buildWallCards(

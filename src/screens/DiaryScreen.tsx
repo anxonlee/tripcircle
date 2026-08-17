@@ -12,7 +12,12 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { categoryIcon } from '../components/icons';
-import { canEditVisit, editWindowLeft, type Visit } from '../domain/diary';
+import {
+  canEditVisit,
+  editWindowLeft,
+  visitPlaceName,
+  type Visit,
+} from '../domain/diary';
 import type { RootStackParamList } from '../navigation';
 import type { CuratedPlace } from '../domain/types';
 import { listPlacesForHistory } from '../services/places';
@@ -69,7 +74,7 @@ export function DiaryScreen({ navigation }: Props) {
     const place = placeById.get(visit.placeId);
     Alert.alert(
       'Delete this visit?',
-      `${place?.name ?? 'This place'} · ${formatDate(visit.timestamp)}\n\n` +
+      `${visitPlaceName(visit, place)} · ${formatDate(visit.timestamp)}\n\n` +
         (visit.photoUri
           ? 'The note and photo from this visit are removed for good.'
           : 'This visit is removed for good.') +
@@ -161,7 +166,7 @@ export function DiaryScreen({ navigation }: Props) {
 
               <View style={styles.body}>
                 <Text style={styles.name} numberOfLines={1}>
-                  {place?.name ?? 'Unknown place'}
+                  {visitPlaceName(item, place)}
                 </Text>
                 <Text style={styles.meta} numberOfLines={1}>
                   {place ? `${place.district} · ` : ''}

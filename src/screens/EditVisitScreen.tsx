@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Image,
   Pressable,
@@ -12,9 +12,15 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StarRating } from '../components/StarRating';
-import { canEditVisit, editWindowLeft, type WouldGoAgain } from '../domain/diary';
+import {
+  canEditVisit,
+  editWindowLeft,
+  visitPlaceName,
+  type WouldGoAgain,
+} from '../domain/diary';
 import type { RootStackParamList } from '../navigation';
-import { bayAreaPlaces } from '../services/mock/bayAreaPlaces';
+import type { CuratedPlace } from '../domain/types';
+import { listPlacesForHistory } from '../services/places';
 import { useDiaryStore } from '../store/useDiaryStore';
 import { colors, tint } from '../theme/colors';
 
@@ -44,9 +50,15 @@ export function EditVisitScreen({ navigation, route }: Props) {
   const updateVisit = useDiaryStore((s) => s.updateVisit);
 
   const visit = visits.find((v) => v.id === route.params.visitId) ?? null;
+  // Through the service, like every other view of a visit. Read straight
+  // from the seed list, a place the user added themselves has no name here.
+  const [places, setPlaces] = useState<CuratedPlace[]>([]);
+  useEffect(() => {
+    listPlacesForHistory().then(setPlaces);
+  }, []);
   const place = useMemo(
-    () => bayAreaPlaces.find((p) => p.id === visit?.placeId) ?? null,
-    [visit]
+    () => places.find((p) => p.id === visit?.placeId) ?? null,
+    [places, visit]
   );
 
   const [note, setNote] = useState(visit?.note ?? '');
@@ -88,7 +100,7 @@ export function EditVisitScreen({ navigation, route }: Props) {
         </Pressable>
         <View style={styles.headerText}>
           <Text style={styles.title} numberOfLines={1}>
-            {place?.name ?? 'This visit'}
+            {visit ? visitPlaceName(visit, place ?? undefined) : 'This visit'}
           </Text>
           <Text style={styles.sub}>{remainingLabel(editWindowLeft(visit))}</Text>
         </View>

@@ -1,8 +1,11 @@
 import {
+  FORGOTTEN_PLACE_LABEL,
   aggregateAll,
   aggregateVisits,
   buildWallCards,
   newVisitId,
+  visitPlaceIsForgotten,
+  visitPlaceName,
   visitTimeline,
   type Visit,
 } from '../diary';
@@ -163,5 +166,54 @@ describe('newVisitId', () => {
   it('does not collide across rapid successive stamps', () => {
     const ids = new Set(Array.from({ length: 500 }, () => newVisitId()));
     expect(ids.size).toBe(500);
+  });
+});
+
+describe('naming the place a visit points at', () => {
+  const place = bayAreaPlaces[0];
+
+  it('prefers the live record, so a rename reads by the current name', () => {
+    const v = visit(place.id, 1, { placeName: 'What it used to be called' });
+    expect(visitPlaceName(v, place)).toBe(place.name);
+  });
+
+  it('falls back to the name the visit stored for itself', () => {
+    // The case that matters most: a place the user added and later removed.
+    const v = visit('mine-abc-1', 1, { placeName: 'Corner Cafe' });
+    expect(visitPlaceName(v, undefined)).toBe('Corner Cafe');
+  });
+
+  it('recovers a place from before the dataset changed city', () => {
+    // Stamped when the app was Hong Kong. The visit predates placeName, so
+    // the archive is the only thing left that knows what it was.
+    expect(visitPlaceName(visit('tai-cheong-bakery', 400), undefined)).toBe(
+      'Tai Cheong Bakery'
+    );
+    expect(visitPlaceName(visit('man-mo-temple', 400), undefined)).toBe(
+      'Man Mo Temple'
+    );
+  });
+
+  it('admits the loss rather than calling the place unknown', () => {
+    // The person standing in it knew exactly where they were. "Unknown
+    // place" tells them the app lost their day rather than lost a name.
+    const label = visitPlaceName(visit('gone-for-good', 400), undefined);
+    expect(label).toBe(FORGOTTEN_PLACE_LABEL);
+    expect(label).not.toMatch(/unknown/i);
+  });
+
+  it('never returns something empty to render', () => {
+    for (const v of [
+      visit('x', 1),
+      visit('x', 1, { placeName: '' }),
+      visit('tai-kwun', 1),
+    ]) {
+      expect(visitPlaceName(v, undefined).length).toBeGreaterThan(0);
+    }
+  });
+
+  it('knows when nothing but a name survives', () => {
+    expect(visitPlaceIsForgotten(visit('tai-kwun', 400), undefined)).toBe(true);
+    expect(visitPlaceIsForgotten(visit(place.id, 1), place)).toBe(false);
   });
 });

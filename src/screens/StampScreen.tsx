@@ -173,6 +173,7 @@ export function StampScreen({ navigation, route }: Props) {
     if (!place) return;
     stamp({
       placeId: place.id,
+      placeName: place.name,
       wouldGoAgain,
       ...(rating != null ? { rating } : {}),
       ...(note.trim() ? { note: note.trim() } : {}),
