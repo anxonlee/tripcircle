@@ -74,9 +74,11 @@ function rideshareUsd(km: number, min: number): number {
  * that answers for Muni also answers for BART and the ferry instead of being
  * bought three times over.
  *
- * Known gap: Distance Matrix caps a request at 25 origins, 25 destinations
- * and 100 elements. Nothing here chunks, so a day of eleven or more places
- * would have its whole matrix rejected and fall back to local estimates.
+ * Requests are cut to what Distance Matrix accepts — 25 origins, 25
+ * destinations, 100 elements — because exceeding any of those fails the whole
+ * request rather than the excess. The chunks of one mode go out one at a
+ * time; only the three modes run together. A large day would otherwise open
+ * twenty-odd sockets at once and meet the per-second limit instead.
  *
  * Any leg Google can't answer for falls back to the local estimate, so a
  * partial API failure degrades quality instead of breaking planning.
@@ -164,10 +166,9 @@ export class GoogleRoutingService implements RoutingService {
     await Promise.all(
       GOOGLE_MODES.map(async (mode) => {
         const rects = planFetch(this.cache, mode, points, now);
-        if (rects.length === 0) return;
-        await Promise.all(
-          rects.map((rect) => this.fetchRect(mode, rect, now).catch(() => undefined))
-        );
+        for (const rect of rects) {
+          await this.fetchRect(mode, rect, now).catch(() => undefined);
+        }
       })
     );
   }

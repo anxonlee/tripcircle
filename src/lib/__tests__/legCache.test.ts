@@ -1,8 +1,12 @@
 import type { LatLng } from '../../domain/types';
 import {
+  chunkRect,
   elementCount,
   LEG_TTL_MS,
   LegCache,
+  MAX_DESTINATIONS,
+  MAX_ELEMENTS,
+  MAX_ORIGINS,
   planFetch,
   pointKey,
 } from '../legCache';
@@ -71,6 +75,65 @@ describe('LegCache', () => {
   });
 });
 
+/** Every rule a single Distance Matrix request has to satisfy. */
+function withinLimits(rects: { origins: LatLng[]; destinations: LatLng[] }[]): boolean {
+  return rects.every(
+    (r) =>
+      r.origins.length <= MAX_ORIGINS &&
+      r.destinations.length <= MAX_DESTINATIONS &&
+      r.origins.length * r.destinations.length <= MAX_ELEMENTS
+  );
+}
+
+describe('chunkRect', () => {
+  const many = (n: number) => Array.from({ length: n }, (_, i) => at(i + 1));
+
+  it('leaves a request that already fits alone', () => {
+    const rect = { origins: many(4), destinations: many(4) };
+    expect(chunkRect(rect)).toEqual([rect]);
+  });
+
+  it('cuts a day too big to ask for in one go', () => {
+    const rect = { origins: many(12), destinations: many(12) };
+    const chunks = chunkRect(rect);
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(withinLimits(chunks)).toBe(true);
+  });
+
+  it('asks for exactly the same pairs, split differently', () => {
+    const rect = { origins: many(12), destinations: many(12) };
+    const covered = new Set<string>();
+    chunkRect(rect).forEach((c) =>
+      c.origins.forEach((o) =>
+        c.destinations.forEach((d) => covered.add(`${pointKey(o)}|${pointKey(d)}`))
+      )
+    );
+    expect(covered.size).toBe(144);
+    expect(elementCount(chunkRect(rect))).toBe(144);
+  });
+
+  it('stays inside the limits at the widest rectangle there can be', () => {
+    const chunks = chunkRect({ origins: many(25), destinations: many(25) });
+    expect(withinLimits(chunks)).toBe(true);
+    // 625 elements at 100 a request is seven, and seven is what it sends.
+    expect(chunks).toHaveLength(7);
+  });
+
+  it('stays inside the limits on a long thin one', () => {
+    expect(withinLimits(chunkRect({ origins: many(40), destinations: many(1) }))).toBe(
+      true
+    );
+    expect(withinLimits(chunkRect({ origins: many(1), destinations: many(40) }))).toBe(
+      true
+    );
+  });
+
+  it('has nothing to ask for when either side is empty', () => {
+    expect(chunkRect({ origins: [], destinations: many(3) })).toEqual([]);
+    expect(chunkRect({ origins: many(3), destinations: [] })).toEqual([]);
+  });
+});
+
 describe('planFetch', () => {
   it('asks for nothing when there is no day to plan', () => {
     expect(planFetch(new LegCache(), 'transit', [at(1)], T0)).toEqual([]);
@@ -127,6 +190,16 @@ describe('planFetch', () => {
         if (!known) expect(covered.has(`${pointKey(a)}|${pointKey(b)}`)).toBe(true);
       })
     );
+  });
+
+  it('hands back requests a big day can actually send', () => {
+    // The case this exists for: eleven places is 121 elements, and one
+    // request of 121 is refused outright rather than trimmed — which used to
+    // lose the whole matrix and drop the day back to local estimates.
+    const points = Array.from({ length: 11 }, (_, i) => at(i + 1));
+    const rects = planFetch(new LegCache(), 'transit', points, T0);
+    expect(withinLimits(rects)).toBe(true);
+    expect(elementCount(rects)).toBe(11 * 10 + 10 * 1);
   });
 
   it('buys the day again once the measurements have expired', () => {

@@ -84,6 +84,53 @@ export function elementCount(rects: FetchRect[]): number {
   return rects.reduce((n, r) => n + r.origins.length * r.destinations.length, 0);
 }
 
+/**
+ * What one Distance Matrix request will accept.
+ *
+ * Exceeding any of these fails the whole request, not the excess — so an
+ * unchunked eleven-place day loses every leg it asked for and silently falls
+ * back to local estimates. Eleven places is not a normal day out, but a shared
+ * link carries whatever the sender put in it.
+ */
+export const MAX_ORIGINS = 25;
+export const MAX_DESTINATIONS = 25;
+export const MAX_ELEMENTS = 100;
+
+/**
+ * Cuts a rectangle into tiles no request will refuse.
+ *
+ * Tiles rather than rows: the element ceiling binds long before the origin
+ * and destination ones do, and tiling to the widest allowed strip keeps the
+ * request count at the minimum the ceiling permits. A 25×25 rectangle is 625
+ * elements and goes out as seven requests, which is exactly 625 over 100
+ * rounded up.
+ *
+ * Splitting changes nothing about the bill. The same pairs are asked for
+ * either way; this only decides how many envelopes they travel in.
+ */
+export function chunkRect(rect: FetchRect): FetchRect[] {
+  const { origins, destinations } = rect;
+  if (origins.length === 0 || destinations.length === 0) return [];
+
+  const perRequestDestinations = Math.min(MAX_DESTINATIONS, destinations.length);
+  const perRequestOrigins = Math.min(
+    MAX_ORIGINS,
+    origins.length,
+    Math.floor(MAX_ELEMENTS / perRequestDestinations)
+  );
+
+  const out: FetchRect[] = [];
+  for (let o = 0; o < origins.length; o += perRequestOrigins) {
+    for (let d = 0; d < destinations.length; d += perRequestDestinations) {
+      out.push({
+        origins: origins.slice(o, o + perRequestOrigins),
+        destinations: destinations.slice(d, d + perRequestDestinations),
+      });
+    }
+  }
+  return out;
+}
+
 export class LegCache {
   /**
    * Insertion-ordered, which is how the cap evicts: the oldest key is the
@@ -154,6 +201,9 @@ export class LegCache {
  * that matters most: switching between the four objectives re-solves the day
  * four times against one purchase.
  *
+ * Both are then cut to what a single request will accept, so what comes back
+ * is a list of requests to make, not a shape to work out afterwards.
+ *
  * The diagonal rides along inside the rectangle and is billed even though a
  * place-to-itself leg is meaningless. Distance Matrix has no way to exclude
  * it, and paying N of N² to keep the request shape simple is the better trade.
@@ -185,7 +235,8 @@ export function planFetch(
   if (unsettled.length === 0) return [];
   const known = survivors;
 
+  // Chunked here rather than at the call site so a caller cannot forget to.
   const rects: FetchRect[] = [{ origins: points, destinations: unsettled }];
   if (known.length > 0) rects.push({ origins: unsettled, destinations: known });
-  return rects;
+  return rects.flatMap(chunkRect);
 }

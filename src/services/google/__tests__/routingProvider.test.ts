@@ -17,10 +17,12 @@ interface Billed {
   elements: number;
   requests: number;
   modes: string[];
+  /** Per request, so the size limits can be checked as Google would. */
+  shapes: { origins: number; destinations: number }[];
 }
 
 function fakeGoogle(): Billed {
-  const billed: Billed = { elements: 0, requests: 0, modes: [] };
+  const billed: Billed = { elements: 0, requests: 0, modes: [], shapes: [] };
 
   globalThis.fetch = jest.fn(async (url: unknown) => {
     const params = new URL(String(url)).searchParams;
@@ -29,6 +31,10 @@ function fakeGoogle(): Billed {
     billed.requests += 1;
     billed.elements += origins.length * destinations.length;
     billed.modes.push(params.get('mode') ?? '');
+    billed.shapes.push({
+      origins: origins.length,
+      destinations: destinations.length,
+    });
 
     return {
       ok: true,
@@ -117,6 +123,21 @@ describe('GoogleRoutingService billing', () => {
     const options = fn(at(1), at(2));
     expect(options.length).toBeGreaterThan(0);
     expect(options.every((o) => o.durationMin > 0)).toBe(true);
+  });
+
+  it('sends a big day in pieces Google will accept', async () => {
+    const billed = fakeGoogle();
+    const big = Array.from({ length: 14 }, (_, i) => at(i + 1));
+    const fn = await new GoogleRoutingService().getLegOptionsFn(big);
+
+    expect(
+      billed.shapes.every(
+        (s) => s.origins <= 25 && s.destinations <= 25 && s.origins * s.destinations <= 100
+      )
+    ).toBe(true);
+    // And the point of sending it at all: the legs come back measured rather
+    // than falling through to the local estimate the way a refused matrix did.
+    expect(fn(at(1), at(2)).find((o) => o.mode === 'walk')?.durationMin).toBe(10);
   });
 
   it('spends nothing when there is no day to plan', async () => {
