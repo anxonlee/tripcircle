@@ -67,6 +67,8 @@ export function SettingsScreen() {
   const visits = useDiaryStore((s) => s.visits);
   const replaceVisits = useDiaryStore((s) => s.replaceVisits);
   const myPlaces = visibleMyPlaces(useMyPlacesStore((s) => s.places));
+  const selectedIds = useTripStore((s) => s.selectedPlaceIds);
+  const togglePlace = useTripStore((s) => s.togglePlace);
   const hideMyPlace = useMyPlacesStore((s) => s.hide);
   const [busy, setBusy] = useState(false);
   /**
@@ -111,7 +113,17 @@ export function SettingsScreen() {
   const onRemoveMyPlace = (id: string, name: string) => {
     Alert.alert(`Remove ${name}?`, 'It leaves Explore and planning. Anything you have stamped there keeps its name.', [
       { text: 'Keep', style: 'cancel' },
-      { text: 'Remove', style: 'destructive', onPress: () => hideMyPlace(id) },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: () => {
+          // Taken out of the day as well as out of the list. The selection
+          // is a list of ids, so a removed place would otherwise still be
+          // counted — Explore offering to "Plan 4" a day with three stops.
+          if (selectedIds.includes(id)) togglePlace(id);
+          hideMyPlace(id);
+        },
+      },
     ]);
   };
 

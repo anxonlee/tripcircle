@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -13,7 +13,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { summarizeWeek } from '../lib/summary';
 import type { RootStackParamList } from '../navigation';
-import { bayAreaPlaces } from '../services/mock/bayAreaPlaces';
+import type { CuratedPlace } from '../domain/types';
+import { listPlacesForHistory } from '../services/places';
 import { useDiaryStore } from '../store/useDiaryStore';
 import { categoryLabels, colors } from '../theme/colors';
 
@@ -44,7 +45,17 @@ export function SummaryScreen({ embedded = false }: { embedded?: boolean } = {})
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const visits = useDiaryStore((s) => s.visits);
 
-  const summary = useMemo(() => summarizeWeek(bayAreaPlaces, visits), [visits]);
+  /**
+   * Through the service, so a week containing a place the user added counts
+   * it. Reading the seed list directly left those visits out of the summary
+   * they belong to.
+   */
+  const [places, setPlaces] = useState<CuratedPlace[]>([]);
+  useEffect(() => {
+    listPlacesForHistory().then(setPlaces);
+  }, []);
+
+  const summary = useMemo(() => summarizeWeek(places, visits), [places, visits]);
 
   const onShare = () => {
     const lines = [

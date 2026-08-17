@@ -18,7 +18,9 @@ import { WallPlaceCard } from '../components/WallPlaceCard';
 import { buildWallCards } from '../domain/diary';
 import { CARD_H, CARD_W, fitTransform, focusTransform, layoutWall } from '../lib/wallLayout';
 import type { RootStackParamList } from '../navigation';
-import { SEED_REGION, bayAreaPlaces } from '../services/mock/bayAreaPlaces';
+import type { CuratedPlace } from '../domain/types';
+import { listPlacesForHistory } from '../services/places';
+import { SEED_REGION } from '../services/mock/bayAreaPlaces';
 import { useDiaryStore } from '../store/useDiaryStore';
 import { colors } from '../theme/colors';
 
@@ -98,7 +100,22 @@ export function MemoryWallScreen({ embedded = false }: { embedded?: boolean } = 
 
   const tier = stampTier(lonDelta);
 
-  const cards = useMemo(() => buildWallCards(bayAreaPlaces, visits), [visits]);
+  /**
+   * Through the service rather than the seed list. A stamp against a place
+   * the user added themselves was landing nowhere: the visit saved, the wall
+   * could not resolve it, and the card simply never appeared -- which reads
+   * as the diary having lost it.
+   */
+  const [places, setPlaces] = useState<CuratedPlace[]>([]);
+  const [placesLoaded, setPlacesLoaded] = useState(false);
+  useEffect(() => {
+    listPlacesForHistory().then((all) => {
+      setPlaces(all);
+      setPlacesLoaded(true);
+    });
+  }, []);
+
+  const cards = useMemo(() => buildWallCards(places, visits), [places, visits]);
   const selected = useMemo(
     () => cards.find((c) => c.place.id === selectedId) ?? null,
     [cards, selectedId]
@@ -233,7 +250,10 @@ export function MemoryWallScreen({ embedded = false }: { embedded?: boolean } = 
   };
 
   // ——— Empty board: the day-one state ———
-  if (cards.length === 0) {
+  // Held back until the places are in. Otherwise a wall with visits on it
+  // shows "stamp a place and it lands here" for a frame, which tells the one
+  // person who has been stamping that their diary is gone.
+  if (cards.length === 0 && (placesLoaded || visits.length === 0)) {
     return (
       <View style={[styles.screen, { paddingTop: embedded ? 0 : insets.top }]}>
         <Header showMap={showMap} onToggleMap={() => setShowMap((v) => !v)} onFit={applyFit} />

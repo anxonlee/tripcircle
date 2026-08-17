@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   FlatList,
@@ -14,7 +14,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { categoryIcon } from '../components/icons';
 import { canEditVisit, editWindowLeft, type Visit } from '../domain/diary';
 import type { RootStackParamList } from '../navigation';
-import { bayAreaPlaces } from '../services/mock/bayAreaPlaces';
+import type { CuratedPlace } from '../domain/types';
+import { listPlacesForHistory } from '../services/places';
 import { useDiaryStore } from '../store/useDiaryStore';
 import { categoryColors, colors, tint } from '../theme/colors';
 
@@ -44,9 +45,19 @@ export function DiaryScreen({ navigation }: Props) {
   const visits = useDiaryStore((s) => s.visits);
   const removeVisit = useDiaryStore((s) => s.removeVisit);
 
+  /**
+   * Resolved through the service, not the seed list. A visit may name a place
+   * the user added themselves, or one they have since put away, and reading
+   * the dataset directly renders both as "Unknown place".
+   */
+  const [places, setPlaces] = useState<CuratedPlace[]>([]);
+  useEffect(() => {
+    listPlacesForHistory().then(setPlaces);
+  }, []);
+
   const placeById = useMemo(
-    () => new Map(bayAreaPlaces.map((p) => [p.id, p])),
-    []
+    () => new Map(places.map((p) => [p.id, p])),
+    [places]
   );
 
   const ordered = useMemo(

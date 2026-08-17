@@ -134,3 +134,22 @@ export const placesService: PlacesService = withMyPlaces(resolvePlacesService())
 
 /** True when place search hits a live provider rather than the curated list. */
 export const placeSearchIsLive = config.useRealProviders;
+
+/**
+ * Every place a stored visit could name, including ones put away.
+ *
+ * The diary is a record of where someone has been, and that record must not
+ * change meaning because the place was later removed from planning. This is
+ * the one caller that wants hidden places back: `listPlaces` deliberately
+ * drops them so they cannot be planned, and a wall built on that list would
+ * quietly lose the visit instead.
+ *
+ * A function rather than a fifth method on PlacesService, because no provider
+ * has anything to contribute to it — the extra places are entirely ours.
+ */
+export async function listPlacesForHistory(): Promise<CuratedPlace[]> {
+  const all = await placesService.listPlaces();
+  const seen = new Set(all.map((p) => p.id));
+  const own = useMyPlacesStore.getState().places.filter((p) => !seen.has(p.id));
+  return [...all, ...own];
+}
