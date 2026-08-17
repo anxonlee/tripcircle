@@ -51,9 +51,6 @@ export function StartDayScreen({ navigation }: Props) {
   const visits = useDiaryStore((s) => s.visits);
 
   const [legOptionsFn, setLegOptionsFn] = useState<LegOptionsFn | null>(null);
-  useEffect(() => {
-    routingService.getLegOptionsFn().then((fn) => setLegOptionsFn(() => fn));
-  }, []);
 
   /**
    * The day is re-anchored to now, not to the window the user set this
@@ -75,11 +72,23 @@ export function StartDayScreen({ navigation }: Props) {
   useEffect(() => {
     placesService.listPlaces().then((all) => {
       const byId = new Map(all.map((p) => [p.id, p]));
-      setSelectedPlaces(
-        selectedIds.map((id) => byId.get(id)).filter((p): p is CuratedPlace => !!p)
-      );
+      const chosen = selectedIds
+        .map((id) => byId.get(id))
+        .filter((p): p is CuratedPlace => !!p);
+      setSelectedPlaces(chosen);
+      // Fetched together with the places, and given the points, so a live
+      // provider prices this day rather than falling back to estimates. The
+      // day out is usually the same one the plan screen just bought, so this
+      // costs nothing beyond the first look.
+      const points = [
+        ...(startPlace ? [startPlace.location] : []),
+        ...chosen.map((p) => p.location),
+      ];
+      routingService
+        .getLegOptionsFn(points)
+        .then((fn) => setLegOptionsFn(() => fn));
     });
-  }, [selectedIds]);
+  }, [selectedIds, startPlace]);
 
   /**
    * Re-solved here rather than handed over from the Plan screen. `optimizeDay`

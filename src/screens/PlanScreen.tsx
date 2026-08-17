@@ -151,12 +151,22 @@ export function PlanScreen({ navigation }: Props) {
     placesService.listPlaces().then((all) => {
       setAllPlaces(all);
       const byId = new Map(all.map((p) => [p.id, p]));
-      setSelectedPlaces(
-        selectedIds.map((id) => byId.get(id)).filter((p): p is CuratedPlace => !!p)
-      );
+      const chosen = selectedIds
+        .map((id) => byId.get(id))
+        .filter((p): p is CuratedPlace => !!p);
+      setSelectedPlaces(chosen);
+      // The points have to go with the request: a live provider prices the
+      // legs it is told about and falls back to estimates for the rest, so
+      // calling this bare would leave the day costed by guesswork.
+      const points = [
+        ...(startPlace ? [startPlace.location] : []),
+        ...chosen.map((p) => p.location),
+      ];
+      routingService
+        .getLegOptionsFn(points)
+        .then((fn) => setLegOptionsFn(() => fn));
     });
-    routingService.getLegOptionsFn().then((fn) => setLegOptionsFn(() => fn));
-  }, [selectedIds]);
+  }, [selectedIds, startPlace]);
 
   /**
    * The day in the order the user arranged, if they arranged one (F6).
