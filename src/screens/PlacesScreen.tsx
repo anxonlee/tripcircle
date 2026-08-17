@@ -22,6 +22,7 @@ import type { Category, CuratedPlace } from '../domain/types';
 import { haversineKm } from '../lib/geo';
 import type { RootStackParamList, TabParamList } from '../navigation';
 import { placeSearchIsLive, placesService } from '../services/places';
+import { useMyPlacesStore } from '../store/useMyPlacesStore';
 import { useTripStore, useUiStore } from '../store/useTripStore';
 import { categoryColors, categoryLabels, colors } from '../theme/colors';
 
@@ -75,9 +76,15 @@ export function PlacesScreen({ navigation }: Props) {
   const listRef = useRef<FlatList<CuratedPlace>>(null);
   const sheetRef = useRef<BottomSheet>(null);
 
+  /**
+   * Subscribed to, not just read: adding a place should put it in this list
+   * on the way back from the form, not on the next cold start. The service
+   * reads the same store, so re-asking it is all that is needed.
+   */
+  const myPlaces = useMyPlacesStore((s) => s.places);
   useEffect(() => {
     placesService.listPlaces().then(setPlaces);
-  }, []);
+  }, [myPlaces]);
 
   /**
    * With a live provider, typing searches the real POI index (debounced) so
@@ -387,7 +394,44 @@ export function PlacesScreen({ navigation }: Props) {
                 color={colors.textMuted}
               />
               <Text style={styles.emptyText}>No places match</Text>
+              {/*
+                The best moment to offer this is the one where the app has
+                just admitted it does not know somewhere. Searching for your
+                own café and being told "no places match" used to be the end
+                of the road.
+              */}
+              <Pressable
+                style={styles.addBtn}
+                onPress={() => navigation.navigate('AddPlace')}
+                accessibilityRole="button"
+              >
+                <MaterialCommunityIcons
+                  name="plus"
+                  size={15}
+                  color={colors.textPrimary}
+                />
+                <Text style={styles.addBtnText}>Add it yourself</Text>
+              </Pressable>
             </View>
+          }
+          ListFooterComponent={
+            listData.length > 0 ? (
+              <Pressable
+                style={styles.addRow}
+                onPress={() => navigation.navigate('AddPlace')}
+                accessibilityRole="button"
+                accessibilityLabel="Add a place of your own"
+              >
+                <MaterialCommunityIcons
+                  name="map-marker-plus-outline"
+                  size={16}
+                  color={colors.textSecondary}
+                />
+                <Text style={styles.addRowText}>
+                  Somewhere missing? Add it yourself
+                </Text>
+              </Pressable>
+            ) : null
           }
           contentContainerStyle={{
             paddingHorizontal: 16,
@@ -522,4 +566,25 @@ const styles = StyleSheet.create({
   planBtnText: { fontSize: 13, fontWeight: '500', color: '#FFFFFF' },
   emptyWrap: { alignItems: 'center', gap: 6, paddingTop: 32 },
   emptyText: { fontSize: 13, color: colors.textMuted },
+  addBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    height: 36,
+    paddingHorizontal: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    marginTop: 6,
+  },
+  addBtnText: { fontSize: 13, fontWeight: '500', color: colors.textPrimary },
+  addRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    height: 48,
+    marginTop: 4,
+  },
+  addRowText: { fontSize: 13, color: colors.textSecondary },
 });

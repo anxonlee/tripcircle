@@ -49,6 +49,7 @@ import type { RootStackParamList } from '../navigation';
 import { placesService } from '../services/places';
 import { routingService } from '../services/routing';
 import { useDiaryStore } from '../store/useDiaryStore';
+import { useMyPlacesStore } from '../store/useMyPlacesStore';
 import { useTripStore, useUiStore } from '../store/useTripStore';
 import { categoryColors, colors, pressedWell, tint } from '../theme/colors';
 
@@ -114,6 +115,7 @@ const OBJECTIVES: { goal: Goal; label: string; icon: 'piggy-bank-outline' | 'sca
 export function PlanScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const startPlace = useTripStore((s) => s.startPlace);
+  const myPlaces = useMyPlacesStore((s) => s.places);
   const selectedIds = useTripStore((s) => s.selectedPlaceIds);
   const goal = useTripStore((s) => s.goal);
   const setGoal = useTripStore((s) => s.setGoal);
@@ -166,7 +168,9 @@ export function PlanScreen({ navigation }: Props) {
         .getLegOptionsFn(points)
         .then((fn) => setLegOptionsFn(() => fn));
     });
-  }, [selectedIds, startPlace]);
+    // `myPlaces` so a place put away while a day is on screen leaves it,
+    // rather than lingering until the next cold start.
+  }, [selectedIds, startPlace, myPlaces]);
 
   /**
    * The day in the order the user arranged, if they arranged one (F6).

@@ -62,6 +62,15 @@ export function PlaceCard({
               .join(' · ')}
           </Text>
           <Text> · {formatPriceBand(place.priceBand)}</Text>
+          {/*
+            A place the user typed in has to be tellable apart from one the
+            dataset supplied — for them, because its hours are their own
+            guess, and for us, because any description of the dataset has to
+            be able to exclude it.
+          */}
+          {place.source === 'mine' ? (
+            <Text style={styles.cardMine}> · yours</Text>
+          ) : null}
         </Text>
         <Text style={styles.cardStatus} numberOfLines={1}>
           {status.open ? (
@@ -117,6 +126,7 @@ const styles = StyleSheet.create({
   cardBody: { flex: 1 },
   cardName: { fontSize: 14, fontWeight: '500', color: colors.textPrimary },
   cardMeta: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  cardMine: { fontSize: 12, color: colors.textMuted, fontStyle: 'italic' },
   cardStatus: { fontSize: 11, marginTop: 2 },
   cardOpen: { color: colors.positive, fontSize: 11, fontWeight: '500' },
   cardStatusMuted: { color: colors.textMuted, fontSize: 11 },

@@ -16,6 +16,12 @@ export type RootStackParamList = {
    * the one it came from. Without it the screen behaves as it always has.
    */
   Stamp: { placeId?: string } | undefined;
+  /**
+   * Adding a place of the user's own (lib/myPlace.ts). Private to the device
+   * — not a submission to the dataset, which is a later phase with a
+   * moderation obligation attached.
+   */
+  AddPlace: undefined;
   Privacy: undefined;
   Diary: undefined;
   EditVisit: { visitId: string };

@@ -11,6 +11,7 @@ import { installGlobalErrorHandler } from './src/services/crashLog';
 import { useSharedDayLink } from './src/hooks/useSharedDayLink';
 import { TabBar } from './src/components/TabBar';
 import type { RootStackParamList, TabParamList } from './src/navigation';
+import { AddPlaceScreen } from './src/screens/AddPlaceScreen';
 import { DiaryScreen } from './src/screens/DiaryScreen';
 import { EditVisitScreen } from './src/screens/EditVisitScreen';
 import { MemoriesScreen } from './src/screens/MemoriesScreen';
@@ -107,6 +108,7 @@ export default function App() {
             <Stack.Screen name="DayPlan" component={PlanScreen} />
             <Stack.Screen name="StartDay" component={StartDayScreen} />
             <Stack.Screen name="Stamp" component={StampScreen} />
+            <Stack.Screen name="AddPlace" component={AddPlaceScreen} />
             <Stack.Screen name="Privacy" component={PrivacyScreen} />
             <Stack.Screen name="Diary" component={DiaryScreen} />
             <Stack.Screen name="EditVisit" component={EditVisitScreen} />

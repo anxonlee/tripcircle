@@ -21,6 +21,7 @@ import { appBuildMeta } from '../lib/appMeta';
 import { formatReport } from '../lib/crashReport';
 import { clearCrashLog, readCrashLog } from '../services/crashLog';
 import { exportDiary, importDiary } from '../services/diaryBackup';
+import { visibleMyPlaces, useMyPlacesStore } from '../store/useMyPlacesStore';
 import { useDiaryStore } from '../store/useDiaryStore';
 import { useTripStore } from '../store/useTripStore';
 import { colors } from '../theme/colors';
@@ -65,6 +66,8 @@ export function SettingsScreen() {
   const setSuggestionBias = useTripStore((s) => s.setSuggestionBias);
   const visits = useDiaryStore((s) => s.visits);
   const replaceVisits = useDiaryStore((s) => s.replaceVisits);
+  const myPlaces = visibleMyPlaces(useMyPlacesStore((s) => s.places));
+  const hideMyPlace = useMyPlacesStore((s) => s.hide);
   const [busy, setBusy] = useState(false);
   /**
    * How many problems are waiting to be sent. Counted on focus rather than
@@ -99,6 +102,17 @@ export function SettingsScreen() {
     // as a second crash.
     await clearCrashLog();
     setCrashes(0);
+  };
+
+  /**
+   * Confirmed, because the row's action is one tap from its name and the
+   * list is small enough that a mis-tap lands on the wrong place easily.
+   */
+  const onRemoveMyPlace = (id: string, name: string) => {
+    Alert.alert(`Remove ${name}?`, 'It leaves Explore and planning. Anything you have stamped there keeps its name.', [
+      { text: 'Keep', style: 'cancel' },
+      { text: 'Remove', style: 'destructive', onPress: () => hideMyPlace(id) },
+    ]);
   };
 
   const onExport = async () => {
@@ -236,6 +250,35 @@ export function SettingsScreen() {
               recorded on this phone. Nothing is sent until you send it, and
               the report carries the error and the build only — never your
               diary.
+            </Text>
+          </>
+        )}
+
+        {/*
+          Same rule as Problems: absent until there is something to manage.
+          But present the moment there is, because a place added by mistake
+          would otherwise be permanent — the form can add and nothing could
+          take away.
+        */}
+        {myPlaces.length > 0 && (
+          <>
+            <Text style={styles.groupLabel}>Your own places</Text>
+            <View style={styles.card}>
+              {myPlaces.map((p, i) => (
+                <Row
+                  key={p.id}
+                  icon="map-marker-outline"
+                  label={p.name}
+                  value="Remove"
+                  onPress={() => onRemoveMyPlace(p.id, p.name)}
+                  divided={i < myPlaces.length - 1}
+                />
+              ))}
+            </View>
+            <Text style={styles.groupNote}>
+              Places you added yourself. They live on this phone and are not
+              sent anywhere. Removing one takes it out of Explore and planning;
+              days you have already stamped against it keep its name.
             </Text>
           </>
         )}
