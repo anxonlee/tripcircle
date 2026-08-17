@@ -42,6 +42,22 @@ export function formatPriceBand(band: PriceBand): string {
   return band === 'free' ? 'Free' : band;
 }
 
+/**
+ * A place's price, or nothing when we do not know it.
+ *
+ * Places found live through OpenStreetMap carry no price at all — the band
+ * on the record is a placeholder the type demands, not an assessment. Every
+ * screen that prints a band goes through here so that stays true in all of
+ * them: getting it right in one and forgetting another is how a café we know
+ * nothing about ends up advertised as cheap.
+ */
+export function formatPlacePrice(place: {
+  priceBand: PriceBand;
+  priceEstimated?: boolean;
+}): string | null {
+  return place.priceEstimated ? null : formatPriceBand(place.priceBand);
+}
+
 /** "820" / "1.8k" / "3.1k" — compact counts. */
 export function formatCount(n: number): string {
   return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);

@@ -8,7 +8,7 @@ import { transportIcon, transportLabel } from '../components/icons';
 import { aggregateAll } from '../domain/diary';
 import type { CuratedPlace } from '../domain/types';
 import { formatDayEnd, formatTime } from '../lib/geo';
-import { formatDuration, formatUsd, formatPriceBand } from '../lib/format';
+import { formatDuration, formatUsd, formatPlacePrice } from '../lib/format';
 import { googleMapsStopUrl } from '../lib/maps';
 import { optimizeDay, withAvailableModes, type DayPlan } from '../lib/optimizer';
 import type { LegOptionsFn } from '../services/routing';
@@ -260,8 +260,10 @@ export function StartDayScreen({ navigation }: Props) {
                   <Text style={styles.stopName}>{current.place.name}</Text>
                   <Text style={styles.stopMeta}>
                     Arrive {formatTime(current.arriveMin)} ·{' '}
-                    {current.place.visitDurationMin} min ·{' '}
-                    {formatPriceBand(current.place.priceBand)}
+                    {current.place.visitDurationMin} min
+                    {formatPlacePrice(current.place)
+                      ? ` · ${formatPlacePrice(current.place)}`
+                      : ''}
                   </Text>
                 </View>
               </View>

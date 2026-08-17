@@ -2,7 +2,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { CuratedPlace } from '../domain/types';
-import { formatPriceBand } from '../lib/format';
+import { formatPlacePrice } from '../lib/format';
 import { openStatus } from '../lib/openStatus';
 import { categoryLabels, colors } from '../theme/colors';
 import { IconTile } from './IconTile';
@@ -61,15 +61,24 @@ export function PlaceCard({
               .map((c) => categoryLabels[c])
               .join(' · ')}
           </Text>
-          <Text> · {formatPriceBand(place.priceBand)}</Text>
           {/*
-            A place the user typed in has to be tellable apart from one the
-            dataset supplied — for them, because its hours are their own
-            guess, and for us, because any description of the dataset has to
-            be able to exclude it.
+            No band on a place found live: OpenStreetMap records no price,
+            and the field holds a placeholder only because the type demands
+            one. Printing it would invent the cheapest thing a card can say.
+          */}
+          {formatPlacePrice(place) ? (
+            <Text> · {formatPlacePrice(place)}</Text>
+          ) : null}
+          {/*
+            A place the user typed in, or one the app merely found, has to be
+            tellable apart from one the dataset supplied — for them, because
+            the hours are a guess rather than a record, and for us, because
+            any description of the dataset has to be able to exclude both.
           */}
           {place.source === 'mine' ? (
             <Text style={styles.cardMine}> · yours</Text>
+          ) : place.source === 'osm' ? (
+            <Text style={styles.cardMine}> · from the map</Text>
           ) : null}
         </Text>
         <Text style={styles.cardStatus} numberOfLines={1}>

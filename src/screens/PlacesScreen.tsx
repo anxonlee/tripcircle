@@ -22,6 +22,7 @@ import type { Category, CuratedPlace } from '../domain/types';
 import { haversineKm } from '../lib/geo';
 import type { RootStackParamList, TabParamList } from '../navigation';
 import { placeSearchIsLive, placesService } from '../services/places';
+import { useFoundPlacesStore } from '../store/useFoundPlacesStore';
 import { useMyPlacesStore } from '../store/useMyPlacesStore';
 import { useTripStore, useUiStore } from '../store/useTripStore';
 import { categoryColors, categoryLabels, colors } from '../theme/colors';
@@ -82,9 +83,10 @@ export function PlacesScreen({ navigation }: Props) {
    * reads the same store, so re-asking it is all that is needed.
    */
   const myPlaces = useMyPlacesStore((s) => s.places);
+  const foundPlaces = useFoundPlacesStore((s) => s.places);
   useEffect(() => {
     placesService.listPlaces().then(setPlaces);
-  }, [myPlaces]);
+  }, [myPlaces, foundPlaces]);
 
   /**
    * With a live provider, typing searches the real POI index (debounced) so

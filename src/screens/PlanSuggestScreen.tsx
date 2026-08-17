@@ -9,7 +9,7 @@ import MapView, { Marker, Polyline } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CategoryPin, PIN_ANCHOR, PinSlot, StartPin } from '../components/CategoryPin';
 import { categoryIcon } from '../components/icons';
-import { formatPriceBand } from '../lib/format';
+import { formatPlacePrice } from '../lib/format';
 import { openStatus } from '../lib/openStatus';
 
 import {
@@ -20,8 +20,11 @@ import {
 } from '../lib/planner';
 import type { CuratedPlace } from '../domain/types';
 import type { RootStackParamList, TabParamList } from '../navigation';
+import { placesService } from '../services/places';
 import { SEED_REGION, bayAreaPlaces } from '../services/mock/bayAreaPlaces';
 import { useDiaryStore } from '../store/useDiaryStore';
+import { useFoundPlacesStore } from '../store/useFoundPlacesStore';
+import { useMyPlacesStore } from '../store/useMyPlacesStore';
 import { useTripStore, useUiStore } from '../store/useTripStore';
 import { categoryColors, colors, tint } from '../theme/colors';
 
@@ -59,6 +62,9 @@ export function PlanSuggestScreen() {
   const startPlace = useTripStore((s) => s.startPlace);
   const setSelection = useTripStore((s) => s.setSelection);
   const selectedIds = useTripStore((s) => s.selectedPlaceIds);
+  // Subscribed so a place added or found mid-session lands here too.
+  const myPlaces = useMyPlacesStore((s) => s.places);
+  const foundPlaces = useFoundPlacesStore((s) => s.places);
   const dayStartMin = useTripStore((s) => s.dayStartMin);
   const homeByMin = useTripStore((s) => s.homeByMin);
   const suggestionBias = useTripStore((s) => s.suggestionBias);
@@ -89,13 +95,23 @@ export function PlanSuggestScreen() {
    * What the user chose in Explore, in the order they chose it. The planner
    * sequences this; it never adds to it or swaps anything out (§3.3.0).
    */
-  const selectedPlaces = useMemo(
-    () =>
-      selectedIds
-        .map((id) => bayAreaPlaces.find((p) => p.id === id))
-        .filter((p): p is CuratedPlace => p !== undefined),
-    [selectedIds]
-  );
+  /*
+   * Resolved through the service, not the seed list. A place the user added
+   * or found through search is not in that list, and reading it directly
+   * dropped those stops silently: Explore counted four, this screen showed
+   * three, and the missing one was the one they had gone looking for.
+   */
+  const [allPlaces, setAllPlaces] = useState<CuratedPlace[]>([]);
+  useEffect(() => {
+    placesService.listPlaces().then(setAllPlaces);
+  }, [myPlaces, foundPlaces]);
+
+  const selectedPlaces = useMemo(() => {
+    const byId = new Map(allPlaces.map((p) => [p.id, p]));
+    return selectedIds
+      .map((id) => byId.get(id))
+      .filter((p): p is CuratedPlace => p !== undefined);
+  }, [allPlaces, selectedIds]);
   const hasSelection = selectedPlaces.length > 0;
 
   /**
@@ -112,6 +128,9 @@ export function PlanSuggestScreen() {
             // from the result: dropping it after the fact would leave a short
             // day, where removing it first lets the next candidate take the
             // place and the day stay the size it was sized to be.
+            // Suggestions stay on the curated set on purpose. Proposing a
+            // place whose hours are a category guess is a different promise
+            // from ordering places the user chose knowing what they are.
             bayAreaPlaces.filter((p) => !dismissed.includes(p.id)),
             visits,
             startPlace,
@@ -403,8 +422,10 @@ export function PlanSuggestScreen() {
                   {i + 1}. {s.place.name}
                 </Text>
                 <Text style={styles.meta}>
-                  {s.place.district} · {s.place.visitDurationMin} min ·{' '}
-                  {formatPriceBand(s.place.priceBand)}
+                  {s.place.district} · {s.place.visitDurationMin} min
+                  {formatPlacePrice(s.place)
+                    ? ` · ${formatPlacePrice(s.place)}`
+                    : ''}
                 </Text>
                 <Text style={styles.status} numberOfLines={1}>
                   {status.open ? (

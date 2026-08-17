@@ -28,7 +28,7 @@ import {
   formatDayTotal,
   formatDuration,
   formatUsd,
-  formatPriceBand,
+  formatPlacePrice,
 } from '../lib/format';
 import {
   droppedStopsWarning,
@@ -49,6 +49,7 @@ import type { RootStackParamList } from '../navigation';
 import { placesService } from '../services/places';
 import { routingService } from '../services/routing';
 import { useDiaryStore } from '../store/useDiaryStore';
+import { useFoundPlacesStore } from '../store/useFoundPlacesStore';
 import { useMyPlacesStore } from '../store/useMyPlacesStore';
 import { useTripStore, useUiStore } from '../store/useTripStore';
 import { categoryColors, colors, pressedWell, tint } from '../theme/colors';
@@ -116,6 +117,7 @@ export function PlanScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const startPlace = useTripStore((s) => s.startPlace);
   const myPlaces = useMyPlacesStore((s) => s.places);
+  const foundPlaces = useFoundPlacesStore((s) => s.places);
   const selectedIds = useTripStore((s) => s.selectedPlaceIds);
   const goal = useTripStore((s) => s.goal);
   const setGoal = useTripStore((s) => s.setGoal);
@@ -170,7 +172,7 @@ export function PlanScreen({ navigation }: Props) {
     });
     // `myPlaces` so a place put away while a day is on screen leaves it,
     // rather than lingering until the next cold start.
-  }, [selectedIds, startPlace, myPlaces]);
+  }, [selectedIds, startPlace, myPlaces, foundPlaces]);
 
   /**
    * The day in the order the user arranged, if they arranged one (F6).
@@ -529,7 +531,9 @@ export function PlanScreen({ navigation }: Props) {
                 {s.place.name}
               </Text>
               <Text style={styles.stopCost}>
-                {s.place.priceBand !== 'free' ? `${formatPriceBand(s.place.priceBand)} · ` : ''}
+                {formatPlacePrice(s.place) && s.place.priceBand !== 'free'
+                  ? `${formatPlacePrice(s.place)} · `
+                  : ''}
                 {s.place.visitDurationMin} min visit
                 {s.waitMin >= 15 ? ` · wait ${s.waitMin} min` : ''}
               </Text>
@@ -1000,8 +1004,10 @@ export function PlanScreen({ navigation }: Props) {
                     <View style={styles.suggestBody}>
                       <Text style={styles.suggestName}>{s.place.name}</Text>
                       <Text style={styles.suggestMeta}>
-                        {s.place.district} · {s.place.visitDurationMin} min ·{' '}
-                        {formatPriceBand(s.place.priceBand)}
+                        {s.place.district} · {s.place.visitDurationMin} min
+                        {formatPlacePrice(s.place)
+                          ? ` · ${formatPlacePrice(s.place)}`
+                          : ''}
                       </Text>
                       {s.reasons.length > 0 && (
                         <Text style={styles.suggestReason}>
