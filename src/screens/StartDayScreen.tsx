@@ -46,6 +46,8 @@ export function StartDayScreen({ navigation }: Props) {
   const goal = useTripStore((s) => s.goal);
   const homeByMin = useTripStore((s) => s.homeByMin);
   const hasCar = useTripStore((s) => s.hasCar);
+  const dayOrder = useTripStore((s) => s.dayOrder);
+  const pinnedTimes = useTripStore((s) => s.pinnedTimes);
   const step = useTripStore((s) => s.startDayStep);
   const setStep = useTripStore((s) => s.setStartDayStep);
   const visits = useDiaryStore((s) => s.visits);
@@ -95,11 +97,29 @@ export function StartDayScreen({ navigation }: Props) {
    * is pure, so passing a plan through navigation would only risk carrying a
    * stale one — and the start time differs from the Plan screen's anyway.
    */
+  /**
+   * The day as the user arranged it, reconciled the same way the Plan screen
+   * reconciles it — known ids in their order, anything new at the end.
+   */
+  const orderedPlaces = useMemo(() => {
+    if (!dayOrder) return selectedPlaces;
+    const byId = new Map(selectedPlaces.map((p) => [p.id, p]));
+    const known = dayOrder
+      .map((id) => byId.get(id))
+      .filter((p): p is CuratedPlace => p !== undefined);
+    return [...known, ...selectedPlaces.filter((p) => !dayOrder.includes(p.id))];
+  }, [selectedPlaces, dayOrder]);
+
+  const pinMap = useMemo(
+    () => new Map(Object.entries(pinnedTimes)),
+    [pinnedTimes]
+  );
+
   const plan = useMemo<DayPlan | null>(() => {
-    if (!startPlace || !legOptionsFn || selectedPlaces.length === 0) return null;
+    if (!startPlace || !legOptionsFn || orderedPlaces.length === 0) return null;
     return optimizeDay({
       startPlace,
-      places: selectedPlaces,
+      places: orderedPlaces,
       dayStartMin: anchorMin,
       homeByMin,
       goal,
@@ -107,8 +127,29 @@ export function StartDayScreen({ navigation }: Props) {
       // driving leg they cannot take would be worse here than on the plan
       // screen, because here they are already out.
       legOptions: withAvailableModes(legOptionsFn, { hasCar: hasCar ?? false }),
+      /*
+       * Both of the user's own decisions come with them out of the door.
+       * This screen re-solves against the real clock rather than the planned
+       * start, and without these it was re-solving against their intentions
+       * too: a day arranged by hand came back in the optimiser's order the
+       * moment it was started, and a time pinned to a stop was not a
+       * constraint any more. Whatever is on the Plan screen is what someone
+       * is standing in the street following.
+       */
+      fixedOrder: dayOrder !== null,
+      pinnedTimes: pinMap,
     });
-  }, [startPlace, selectedPlaces, legOptionsFn, anchorMin, homeByMin, goal, hasCar]);
+  }, [
+    startPlace,
+    orderedPlaces,
+    legOptionsFn,
+    anchorMin,
+    homeByMin,
+    goal,
+    hasCar,
+    dayOrder,
+    pinMap,
+  ]);
 
   /** Places stamped since midnight — what "done" means on this screen. */
   const stampedToday = useMemo(() => {

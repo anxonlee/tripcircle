@@ -570,7 +570,16 @@ function repairPinnedTimes(
     let best = current;
     let bestLateness = sched.pinLatenessMin;
     let bestClosing = sched.hardClosingViolations;
-    let bestWeight = Infinity;
+    /**
+     * Seeded with the tour we already have, not with Infinity. A move that
+     * changes no lateness and no closing time has to earn its place by
+     * being a shorter day; seeded high it would be accepted for nothing,
+     * and the next pass would be free to move it back.
+     */
+    let bestWeight = tourWeight(
+      current.map((p) => indexOf.get(p)!),
+      w
+    );
     for (let pos = 0; pos < latePos; pos++) {
       const candidate = [...current];
       const [moved] = candidate.splice(latePos, 1);
@@ -584,7 +593,7 @@ function repairPinnedTimes(
       // closing is not a stop at all, where a late arrival is still a
       // visit. Closing violations therefore gate the move rather than
       // trading against it.
-      if (cand.hardClosingViolations > bestClosing) continue;
+      if (cand.hardClosingViolations > sched.hardClosingViolations) continue;
       if (
         cand.pinLatenessMin < bestLateness ||
         (cand.pinLatenessMin === bestLateness &&
