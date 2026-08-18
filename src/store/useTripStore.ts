@@ -92,6 +92,23 @@ interface TripState {
   setDayOrder: (ids: string[]) => void;
   clearDayOrder: () => void;
   /**
+   * Times the user fixed by hand, place id to minutes since midnight
+   * (PRD F6, §3.4).
+   *
+   * The counterpart to `dayOrder`: that one says what comes after what,
+   * this one says when. Both are the user overruling the optimiser, and
+   * both leave it to do everything they did not ask about.
+   *
+   * Unlike `dayOrder` these are dropped as soon as the place leaves the
+   * day. An order is about the day and survives it changing shape; a pin
+   * is about one place, so once that place is gone the pin is a promise
+   * with nothing to keep it about — and one that would come back to life
+   * unannounced if the place were ever re-added.
+   */
+  pinnedTimes: Record<string, number>;
+  setPinnedTime: (placeId: string, minutes: number) => void;
+  clearPinnedTime: (placeId: string) => void;
+  /**
    * Whether AsyncStorage has answered yet.
    *
    * Zustand's persist middleware rehydrates asynchronously, so the first
@@ -121,14 +138,24 @@ export const useTripStore = create<TripState>()(
       setStartPlace: (sp, opts) =>
         set({ startPlace: sp, startPlaceEphemeral: opts?.ephemeral ?? false }),
       togglePlace: (id) =>
-        set((s) => ({
-          selectedPlaceIds: s.selectedPlaceIds.includes(id)
-            ? s.selectedPlaceIds.filter((x) => x !== id)
-            : [...s.selectedPlaceIds, id],
-          startDayStep: 0,
-        })),
-      setSelection: (ids) => set({ selectedPlaceIds: ids, startDayStep: 0 }),
-      clearSelection: () => set({ selectedPlaceIds: [], startDayStep: 0 }),
+        set((s) => {
+          const removing = s.selectedPlaceIds.includes(id);
+          const { [id]: _dropped, ...rest } = s.pinnedTimes;
+          return {
+            selectedPlaceIds: removing
+              ? s.selectedPlaceIds.filter((x) => x !== id)
+              : [...s.selectedPlaceIds, id],
+            startDayStep: 0,
+            pinnedTimes: removing ? rest : s.pinnedTimes,
+          };
+        }),
+      // Both of these replace the day wholesale — adopting a suggestion, or
+      // opening someone else's link — so the times belong to a day that no
+      // longer exists.
+      setSelection: (ids) =>
+        set({ selectedPlaceIds: ids, startDayStep: 0, pinnedTimes: {} }),
+      clearSelection: () =>
+        set({ selectedPlaceIds: [], startDayStep: 0, pinnedTimes: {} }),
       setGoal: (g) => set({ goal: g }),
       setDayWindow: (window) => set(clampDayWindow(window)),
       suggestionBias: 'familiar',
@@ -138,6 +165,16 @@ export const useTripStore = create<TripState>()(
       dayOrder: null,
       setDayOrder: (ids) => set({ dayOrder: ids }),
       clearDayOrder: () => set({ dayOrder: null }),
+      pinnedTimes: {},
+      setPinnedTime: (placeId, minutes) =>
+        set((s) => ({
+          pinnedTimes: { ...s.pinnedTimes, [placeId]: minutes },
+        })),
+      clearPinnedTime: (placeId) =>
+        set((s) => {
+          const { [placeId]: _dropped, ...rest } = s.pinnedTimes;
+          return { pinnedTimes: rest };
+        }),
       hydrated: false,
     }),
     {
@@ -154,6 +191,7 @@ export const useTripStore = create<TripState>()(
         suggestionBias: s.suggestionBias,
         startDayStep: s.startDayStep,
         dayOrder: s.dayOrder,
+        pinnedTimes: s.pinnedTimes,
       }),
       /**
        * Fires once storage has answered, whether or not anything was stored.

@@ -19,6 +19,7 @@ import MapView, { Marker, Polyline } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CategoryPin, PIN_ANCHOR, PinSlot, StartPin } from '../components/CategoryPin';
 import { DayWindowControl } from '../components/DayWindowControl';
+import { PinTimeSheet } from '../components/PinTimeSheet';
 import { ReorderableStack } from '../components/ReorderableStack';
 import { categoryIcon, transportIcon, transportLabel } from '../components/icons';
 import { TimelineNode } from '../components/IconTile';
@@ -128,6 +129,9 @@ export function PlanScreen({ navigation }: Props) {
   const dayOrder = useTripStore((s) => s.dayOrder);
   const setDayOrder = useTripStore((s) => s.setDayOrder);
   const clearDayOrder = useTripStore((s) => s.clearDayOrder);
+  const pinnedTimes = useTripStore((s) => s.pinnedTimes);
+  const setPinnedTime = useTripStore((s) => s.setPinnedTime);
+  const clearPinnedTime = useTripStore((s) => s.clearPinnedTime);
   const highlightedId = useUiStore((s) => s.highlightedPlaceId);
   const setHighlighted = useUiStore((s) => s.setHighlighted);
   const dismissed = useUiStore((s) => s.dismissedPlaceIds);
@@ -148,6 +152,12 @@ export function PlanScreen({ navigation }: Props) {
    */
   const sheetScrollRef = useRef<any>(null);
   const [editing, setEditing] = useState(false);
+  /** The stop whose time is being fixed, if the sheet is open. */
+  const [pinning, setPinning] = useState<{
+    placeId: string;
+    name: string;
+    suggested: number;
+  } | null>(null);
   /** Set once a hold has run its course, read when the finger comes off. */
   const holdArmed = useRef(false);
 
@@ -197,6 +207,17 @@ export function PlanScreen({ navigation }: Props) {
    * changes. Four solves of a typical day cost single-digit milliseconds
    * together, so paying for all of them up front buys instant switching.
    */
+  /**
+   * The pins as the optimiser wants them. Stored as an object so it
+   * persists, passed as a Map because the schedule looks one up per stop —
+   * and rebuilt only when the pins change, or every solve would see a new
+   * object and re-run.
+   */
+  const pinMap = useMemo(
+    () => new Map(Object.entries(pinnedTimes)),
+    [pinnedTimes]
+  );
+
   const plans = useMemo<Record<Goal, DayPlan> | null>(() => {
     /*
      * Nothing is solved until storage has answered. `dayOrder` decides
@@ -216,6 +237,7 @@ export function PlanScreen({ navigation }: Props) {
       // The four objectives still differ with a fixed order — they choose
       // transport per leg, not just the sequence.
       fixedOrder: dayOrder !== null,
+      pinnedTimes: pinMap,
     };
     return {
       economic: optimizeDay({ ...base, goal: 'economic' }),
@@ -231,6 +253,7 @@ export function PlanScreen({ navigation }: Props) {
     dayStartMin,
     homeByMin,
     dayOrder,
+    pinMap,
   ]);
 
   const plan = plans?.[goal] ?? null;
@@ -549,7 +572,50 @@ export function PlanScreen({ navigation }: Props) {
               ))}
             </View>
             <View style={styles.stopTail}>
-              <Text style={styles.stopTime}>{formatTime(s.arriveMin)}</Text>
+              {/*
+                Live while arranging as well as outside it. Arranging is
+                where someone is already saying what the day should be by
+                hand, and the grip sits in the tail's other box, so the two
+                manual controls stand side by side rather than in different
+                modes.
+              */}
+              <Pressable
+                onPress={() =>
+                  setPinning({
+                    placeId: s.place.id,
+                    name: s.place.name,
+                    suggested: s.beginMin,
+                  })
+                }
+                hitSlop={{ top: 12, bottom: 12, left: 10, right: 4 }}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  s.pinnedMin === undefined
+                    ? `Arrives ${formatTime(s.arriveMin)}. Tap to fix a time for ${s.place.name}.`
+                    : `${s.place.name} pinned to ${formatTime(s.pinnedMin)}. Tap to change it.`
+                }
+                style={styles.timeTap}
+              >
+                <Text style={styles.stopTime}>{formatTime(s.arriveMin)}</Text>
+                {/*
+                  The pin sits under the arrival rather than replacing it.
+                  They are different facts once a pin is held — you get there
+                  at 12:20 and go in at 13:00 — and the row already reports
+                  the wait between them.
+                */}
+                {s.pinnedMin !== undefined && (
+                  <View style={styles.pinChip}>
+                    <MaterialCommunityIcons
+                      name="pin"
+                      size={9}
+                      color={colors.accent}
+                    />
+                    <Text style={styles.pinChipText}>
+                      {formatTime(s.pinnedMin)}
+                    </Text>
+                  </View>
+                )}
+              </Pressable>
               {/*
                 The grip stands in the box the row's own controls already
                 occupied rather than taking one of its own. Same 44pt square,
@@ -898,7 +964,9 @@ export function PlanScreen({ navigation }: Props) {
                   size={16}
                   color={colors.textMuted}
                 />
-                <Text style={styles.arrangeNoteText}>Drag to reorder</Text>
+                <Text style={styles.arrangeNoteText}>
+                  Drag to reorder · tap a time to pin it
+                </Text>
               </View>
             </View>
           ) : (
@@ -1044,6 +1112,34 @@ export function PlanScreen({ navigation }: Props) {
           )}
         </BottomSheetScrollView>
       </BottomSheet>
+
+      {/*
+        Outside the bottom sheet on purpose. A modal rendered inside it
+        inherits the sheet's clipping, so the card would have appeared
+        cropped to whatever height the sheet happened to be at.
+
+        Keyed by place so the stepper starts from the stop that was tapped
+        rather than from whichever one opened it first.
+      */}
+      {pinning && (
+        <PinTimeSheet
+          key={pinning.placeId}
+          placeName={pinning.name}
+          pinned={pinnedTimes[pinning.placeId]}
+          suggested={pinning.suggested}
+          dayStartMin={dayStartMin}
+          homeByMin={homeByMin}
+          onPin={(minutes) => {
+            setPinnedTime(pinning.placeId, minutes);
+            setPinning(null);
+          }}
+          onClear={() => {
+            clearPinnedTime(pinning.placeId);
+            setPinning(null);
+          }}
+          onClose={() => setPinning(null)}
+        />
+      )}
     </View>
   );
 }
@@ -1398,6 +1494,18 @@ const styles = StyleSheet.create({
   stopName: { fontSize: 14, fontWeight: '500', color: colors.textPrimary },
   stopCost: { fontSize: 11, color: colors.textMuted, marginTop: 2 },
   stopTime: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  /** Column so a held time can sit under the arrival without widening the tail. */
+  timeTap: { alignItems: 'flex-end', gap: 2 },
+  pinChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 6,
+    backgroundColor: colors.surfaceAlt,
+  },
+  pinChipText: { fontSize: 10, fontWeight: '500', color: colors.accent },
   /**
    * Arrival time and the row's controls, side by side.
    *

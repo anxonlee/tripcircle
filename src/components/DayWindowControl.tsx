@@ -9,6 +9,7 @@ import {
   type DayWindow,
 } from '../lib/planner';
 import { colors } from '../theme/colors';
+import { TimeStepperRow } from './TimeStepperRow';
 
 /** How far one tap moves an end of the window. */
 const STEP_MIN = 15;
@@ -90,7 +91,7 @@ export function DayWindowControl({
               only mean waiting. Nothing is lost by trying a shorter day.
             </Text>
 
-            <Row
+            <TimeStepperRow
               label="Not before"
               value={window.dayStartMin}
               onLess={() => nudge('dayStartMin', -STEP_MIN)}
@@ -100,7 +101,7 @@ export function DayWindowControl({
               lessLabel="Earlier"
               moreLabel="Later"
             />
-            <Row
+            <TimeStepperRow
               label="Home by"
               value={window.homeByMin}
               onLess={() => nudge('homeByMin', -STEP_MIN)}
@@ -123,79 +124,6 @@ export function DayWindowControl({
         </Pressable>
       </Modal>
     </>
-  );
-}
-
-function Row({
-  label,
-  value,
-  onLess,
-  onMore,
-  lessDisabled,
-  moreDisabled,
-  lessLabel,
-  moreLabel,
-}: {
-  label: string;
-  value: number;
-  onLess: () => void;
-  onMore: () => void;
-  lessDisabled?: boolean;
-  moreDisabled?: boolean;
-  lessLabel: string;
-  moreLabel: string;
-}) {
-  return (
-    <View style={styles.row}>
-      <Text style={styles.rowLabel}>{label}</Text>
-      <View style={styles.stepper}>
-        <Step
-          icon="minus"
-          onPress={onLess}
-          disabled={lessDisabled}
-          label={`${lessLabel} ${label}`}
-        />
-        <Text style={styles.rowValue}>{formatTime(value)}</Text>
-        <Step
-          icon="plus"
-          onPress={onMore}
-          disabled={moreDisabled}
-          label={`${moreLabel} ${label}`}
-        />
-      </View>
-    </View>
-  );
-}
-
-function Step({
-  icon,
-  onPress,
-  disabled,
-  label,
-}: {
-  icon: 'minus' | 'plus';
-  onPress: () => void;
-  disabled?: boolean;
-  label: string;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={disabled}
-      // 32pt buttons, tapped repeatedly to walk the time along. Same reason
-      // as the chip: reach the 44pt minimum without growing the control.
-      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityState={{ disabled: !!disabled }}
-      style={[styles.step, disabled && styles.stepDisabled]}
-    >
-      <MaterialCommunityIcons
-        name={icon}
-        size={17}
-        color={disabled ? colors.textMuted : colors.textPrimary}
-      />
-    </Pressable>
   );
 }
 
@@ -234,25 +162,6 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 16, fontWeight: '500', color: colors.textPrimary },
   sub: { fontSize: 12, color: colors.textSecondary, lineHeight: 17 },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  rowLabel: { fontSize: 14, color: colors.textPrimary },
-  stepper: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  rowValue: {
-    fontSize: 15,
-    fontWeight: '500',
-    color: colors.textPrimary,
-    minWidth: 54,
-    textAlign: 'center',
-  },
-  step: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surfaceAlt,
-  },
-  stepDisabled: { opacity: 0.4 },
   note: { fontSize: 11, color: colors.textMuted, lineHeight: 16 },
   done: {
     height: 42,
