@@ -198,3 +198,118 @@ describe('unresolvedCount', () => {
     expect(unresolvedCount(encodeDayLink(day()), KNOWN)).toBe(0);
   });
 });
+
+describe('pinned times', () => {
+  const ok = (url: string) => {
+    const r = decodeDayLink(url, KNOWN);
+    if (!r.ok) throw new Error(`expected a day, got ${r.reason.kind}`);
+    return r.day;
+  };
+
+  it('carries a time the sender fixed', () => {
+    const url = encodeDayLink(day({ pinnedTimes: { 'union-square': 780 } }));
+    expect(url).toContain('t=union-square:780');
+    expect(ok(url).pinnedTimes).toEqual({ 'union-square': 780 });
+  });
+
+  it('says nothing at all when nothing is pinned', () => {
+    // The commonest day. A trailing `t=` would be noise in every link sent.
+    const url = encodeDayLink(day());
+    expect(url).not.toContain('t=');
+    expect(ok(url).pinnedTimes).toBeUndefined();
+  });
+
+  it('leaves the older keys where they were', () => {
+    // Builds already in TestFlight read those five by name. This is the whole
+    // reason the version does not move.
+    const url = encodeDayLink(day({ pinnedTimes: { 'union-square': 780 } }));
+    expect(url).toContain(`v=${TRIP_LINK_VERSION}`);
+    expect(url).toContain(`c=${DATASET_CITY}`);
+    expect(url).toContain('w=540-1200');
+    expect(url).toContain('g=balanced');
+    expect(url).toContain('p=ferry-building,union-square,dolores-park');
+  });
+
+  it('an older build reading it still gets the day', () => {
+    // What a build with no `t` handling does: reads the five keys it knows
+    // and ignores the sixth. Simulated by decoding a link with the key
+    // stripped, which must produce the same day minus the times.
+    const url = encodeDayLink(day({ pinnedTimes: { 'union-square': 780 } }));
+    const stripped = url.replace(/&t=[^&]*/, '');
+    expect(ok(stripped).placeIds).toEqual(ok(url).placeIds);
+    expect(ok(stripped).pinnedTimes).toBeUndefined();
+  });
+
+  it('drops a pin for a place that is not in the day', () => {
+    // A link must not be able to say something about a place it does not
+    // carry — on either side of the trip.
+    const url = encodeDayLink(
+      day({ pinnedTimes: { 'golden-gate-park': 600, 'union-square': 780 } })
+    );
+    expect(url).not.toContain('golden-gate-park');
+    expect(ok(url).pinnedTimes).toEqual({ 'union-square': 780 });
+  });
+
+  it('drops a pin for a place this build cannot resolve', () => {
+    const url = `pirtsf://d?v=1&c=sf&w=540-1200&g=balanced&p=ferry-building,made-up-place&t=made-up-place:600`;
+    expect(ok(url).pinnedTimes).toBeUndefined();
+  });
+
+  it('drops a time outside the shared window', () => {
+    // The window travels in the same link. A pin outside it describes a day
+    // the link itself says is not being had.
+    const url = `pirtsf://d?v=1&c=sf&w=540-1200&g=balanced&p=union-square&t=union-square:1350`;
+    expect(ok(url).pinnedTimes).toBeUndefined();
+  });
+
+  it('will not encode a time outside the window either', () => {
+    const url = encodeDayLink(
+      day({ window: { dayStartMin: 540, homeByMin: 1200 }, pinnedTimes: { 'union-square': 1350 } })
+    );
+    expect(url).not.toContain('t=');
+  });
+
+  it('keeps several', () => {
+    const url = encodeDayLink(
+      day({ pinnedTimes: { 'ferry-building': 600, 'dolores-park': 900 } })
+    );
+    expect(ok(url).pinnedTimes).toEqual({
+      'ferry-building': 600,
+      'dolores-park': 900,
+    });
+  });
+
+  it('survives a chat client adding a full stop', () => {
+    const url = encodeDayLink(day({ pinnedTimes: { 'union-square': 780 } }));
+    expect(ok(`${url}.`).pinnedTimes).toEqual({ 'union-square': 780 });
+  });
+
+  it('takes the first of a repeated id rather than the last', () => {
+    // Matching the query parser: anything appended must not rewrite what a
+    // valid link already said.
+    const url = `pirtsf://d?v=1&c=sf&w=540-1200&g=balanced&p=union-square&t=union-square:600,union-square:900`;
+    expect(ok(url).pinnedTimes).toEqual({ 'union-square': 600 });
+  });
+
+  it('ignores a malformed pair without losing the day', () => {
+    const url = `pirtsf://d?v=1&c=sf&w=540-1200&g=balanced&p=ferry-building,union-square&t=nonsense,union-square:abc,ferry-building:600`;
+    const d = ok(url);
+    expect(d.placeIds).toEqual(['ferry-building', 'union-square']);
+    expect(d.pinnedTimes).toEqual({ 'ferry-building': 600 });
+  });
+
+  it('round-trips unchanged', () => {
+    const original = day({
+      pinnedTimes: { 'ferry-building': 600, 'union-square': 780 },
+    });
+    const back = ok(encodeDayLink(original));
+    expect(back.placeIds).toEqual(original.placeIds);
+    expect(back.pinnedTimes).toEqual(original.pinnedTimes);
+  });
+
+  it('still carries no start place', () => {
+    // The rule the whole format exists under, restated against the new key.
+    const url = encodeDayLink(day({ pinnedTimes: { 'union-square': 780 } }));
+    expect(url).not.toMatch(/lat|lng|latitude|longitude|anchor|start|home=/i);
+  });
+});

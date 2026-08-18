@@ -17,7 +17,8 @@ import { decodeDayLink, unresolvedCount, type DecodeFailure } from '../lib/tripL
  * So it asks first, and says what it is about to overwrite. A link from a
  * friend should not be able to delete an afternoon someone spent choosing.
  *
- * What is adopted is the stops, their order, the window and the objective.
+ * What is adopted is the stops, their order, the window, the objective, and
+ * any times the sender pinned to a stop.
  * The start place is not in the link and is not touched — the day recomputes
  * from wherever the recipient starts, which is the whole idea: the same
  * Saturday from a different doorstep.
@@ -27,6 +28,7 @@ export function useSharedDayLink(): void {
   const setDayOrder = useTripStore((s) => s.setDayOrder);
   const setDayWindow = useTripStore((s) => s.setDayWindow);
   const setGoal = useTripStore((s) => s.setGoal);
+  const setPinnedTimes = useTripStore((s) => s.setPinnedTimes);
 
   /**
    * Collapses the double delivery of ONE tap: on a cold start the same URL
@@ -80,7 +82,8 @@ export function useSharedDayLink(): void {
         return;
       }
 
-      const { placeIds, window, goal } = result.day;
+      const { placeIds, window, goal, pinnedTimes } = result.day;
+      const pinCount = pinnedTimes ? Object.keys(pinnedTimes).length : 0;
       const missing = unresolvedCount(url, known);
       const { selectedPlaceIds, startDayStep } = useTripStore.getState();
       const existing = selectedPlaceIds.length;
@@ -112,6 +115,12 @@ export function useSharedDayLink(): void {
         existing > 0
           ? `This replaces the ${existing} ${existing === 1 ? 'place' : 'places'} you have selected.`
           : null,
+        // Said before the re-anchoring line, because it is the exception to
+        // it: everything else about the day is worked out again, and these
+        // are the one thing the sender fixed that survives the journey.
+        pinCount > 0
+          ? `${pinCount === 1 ? 'One stop has a time' : `${pinCount} stops have times`} the sender fixed. ${pinCount === 1 ? 'It comes' : 'They come'} with the day, and you can change ${pinCount === 1 ? 'it' : 'them'}.`
+          : null,
         'The route is worked out again from your own start place.',
       ].filter(Boolean) as string[];
 
@@ -127,6 +136,10 @@ export function useSharedDayLink(): void {
             setDayOrder(placeIds);
             setDayWindow(window);
             setGoal(goal);
+            // After `setSelection`, which clears the recipient's own pins.
+            // The window goes in first for the same reason: a pin is only
+            // meaningful inside the day it was fixed in.
+            setPinnedTimes(pinnedTimes ?? {});
           },
         },
       ]);
@@ -138,7 +151,7 @@ export function useSharedDayLink(): void {
       cancelled = true;
       sub.remove();
     };
-  }, [setSelection, setDayOrder, setDayWindow, setGoal]);
+  }, [setSelection, setDayOrder, setDayWindow, setGoal, setPinnedTimes]);
 }
 
 /**

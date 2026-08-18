@@ -407,15 +407,34 @@ export function PlanScreen({ navigation }: Props) {
       placeIds: shared.map((p) => p.id),
       window: { dayStartMin, homeByMin },
       goal,
+      pinnedTimes,
     });
     const names = shared.map((p) => p.name).join(' · ');
+    /**
+     * Pinned stops are named in the readable half too.
+     *
+     * The link carries them either way, but the text above it is what a
+     * friend without the app reads, and "we are at Ma's at 13:00" is the
+     * part of a shared day people actually reply to. It is also the only
+     * thing in the message that says a time was chosen rather than
+     * calculated.
+     */
+    const held = shared
+      .filter((p) => pinnedTimes[p.id] !== undefined)
+      .map((p) => `${p.name} at ${formatTime(pinnedTimes[p.id])}`);
     // The names ride along as plain text because a pirtsf:// link renders as
     // nothing but its own scheme in most chat apps, and a friend who has not
     // installed the app yet should still be able to read what they were sent.
     await Share.share({
-      message: `A day in the Bay Area: ${names}\n\nOpen in PIRT: ${link}`,
+      message: [
+        `A day in the Bay Area: ${names}`,
+        held.length > 0 ? held.join(' · ') : null,
+        `Open in PIRT: ${link}`,
+      ]
+        .filter(Boolean)
+        .join('\n\n'),
     });
-  }, [plan, orderedPlaces, dayStartMin, homeByMin, goal]);
+  }, [plan, orderedPlaces, dayStartMin, homeByMin, goal, pinnedTimes]);
 
   /**
    * Hand the whole day to Google Maps.

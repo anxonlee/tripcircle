@@ -28,6 +28,10 @@ import { clampDayWindow, LATEST_HOME_BY_MIN, type DayWindow } from './planner';
  *
  *   pirtsf://d?v=1&c=sf&w=540-1439&g=balanced&p=ferry-building,union-square
  *
+ * A day with a time fixed to one of its stops carries a sixth key:
+ *
+ *   ...&p=ferry-building,union-square&t=union-square:1140
+ *
  * The city tag is what stops a Hong Kong day opening silently empty on a
  * build carrying a different dataset. Place ids are shared vocabulary between
  * two copies of the app; they are meaningless to anyone else, which is the
@@ -61,6 +65,17 @@ export interface SharedDay {
   placeIds: string[];
   window: DayWindow;
   goal: Goal;
+  /**
+   * Times the sender fixed by hand, place id to minutes since midnight
+   * (PRD F6, §3.4). Absent when they fixed none, which is most days.
+   *
+   * These travel because a pin is part of the arrangement, not part of the
+   * route: "we are at the table at seven" survives being re-anchored to
+   * someone else's start place, where an arrival time does not. Sharing the
+   * order but not the times would hand over half a plan and no way to see
+   * which half was missing.
+   */
+  pinnedTimes?: Record<string, number>;
 }
 
 export type DecodeResult =
@@ -95,6 +110,20 @@ export function encodeDayLink(day: SharedDay): string {
     `g=${day.goal}`,
     `p=${ids.join(',')}`,
   ];
+  /**
+   * Appended rather than folded into `p`, and the version is deliberately
+   * not bumped for it.
+   *
+   * Builds 6–10 are already in TestFlight and read a link by looking up the
+   * five keys they know; an unknown sixth is ignored, so a pinned day opens
+   * on them as the same day without the times. Bumping the version would
+   * instead make those builds refuse the link outright — a day nobody can
+   * open is a worse outcome than a day missing a constraint, and the whole
+   * point of `tooNew` is to protect against changes that would be *misread*,
+   * which this is not.
+   */
+  const pins = encodePins(day.pinnedTimes, ids, w);
+  if (pins) params.push(`t=${pins}`);
   return `${TRIP_LINK_SCHEME}://d?${params.join('&')}`;
 }
 
@@ -134,15 +163,68 @@ export function decodeDayLink(url: string, known: Set<string>): DecodeResult {
   const unique = placeIds.filter((id, i) => placeIds.indexOf(id) === i);
   if (unique.length === 0) return { ok: false, reason: { kind: 'empty' } };
 
+  const window = parseWindow(params.get('w') ?? null);
+
   return {
     ok: true,
     day: {
       city,
       placeIds: unique,
-      window: parseWindow(params.get('w') ?? null),
+      window,
       goal: parseGoal(params.get('g') ?? null),
+      pinnedTimes: parsePins(params.get('t') ?? null, unique, window),
     },
   };
+}
+
+/**
+ * "id:540,other-id:780". Pairs whose place is not in the day are dropped
+ * before sending: a pin without its stop describes nothing, and carrying it
+ * would let a link say something about a place it does not contain.
+ */
+function encodePins(
+  pins: Record<string, number> | undefined,
+  ids: string[],
+  window: DayWindow
+): string | null {
+  if (!pins) return null;
+  const parts = ids
+    .filter((id) => Number.isFinite(pins[id]))
+    .map((id) => [id, Math.round(pins[id])] as const)
+    .filter(([, min]) => min >= window.dayStartMin && min <= window.homeByMin)
+    .map(([id, min]) => `${id}:${min}`);
+  return parts.length > 0 ? parts.join(',') : null;
+}
+
+/**
+ * Read back against the day that survived parsing, not against the raw
+ * string. A pin for a place this build could not resolve has nothing to
+ * attach to, and one outside the shared window describes a day the link
+ * itself says is not being had.
+ */
+function parsePins(
+  raw: string | null,
+  placeIds: string[],
+  window: DayWindow
+): Record<string, number> | undefined {
+  if (!raw) return undefined;
+  const inDay = new Set(placeIds);
+  const out: Record<string, number> = {};
+  for (const pair of raw.split(',')) {
+    const at = pair.lastIndexOf(':');
+    if (at < 0) continue;
+    const id = pair.slice(0, at).trim();
+    if (!PLACE_ID.test(id) || !inDay.has(id)) continue;
+    // First wins, matching the query parser: a repeated id is malformed,
+    // and taking the last would let anything appended rewrite it.
+    if (id in out) continue;
+    const min = Number(pair.slice(at + 1).trim());
+    if (!Number.isFinite(min)) continue;
+    const rounded = Math.round(min);
+    if (rounded < window.dayStartMin || rounded > window.homeByMin) continue;
+    out[id] = rounded;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 /** How many of the link's stops this build could not place. */

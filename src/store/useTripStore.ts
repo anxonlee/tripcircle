@@ -109,6 +109,13 @@ interface TripState {
   setPinnedTime: (placeId: string, minutes: number) => void;
   clearPinnedTime: (placeId: string) => void;
   /**
+   * Replace the lot. For adopting a shared day, where the times arrive with
+   * the places and have to land after `setSelection` has cleared what was
+   * there — setting them one at a time would leave a frame in which half of
+   * someone else's day was pinned and half was not.
+   */
+  setPinnedTimes: (times: Record<string, number>) => void;
+  /**
    * Whether AsyncStorage has answered yet.
    *
    * Zustand's persist middleware rehydrates asynchronously, so the first
@@ -170,6 +177,7 @@ export const useTripStore = create<TripState>()(
         set((s) => ({
           pinnedTimes: { ...s.pinnedTimes, [placeId]: minutes },
         })),
+      setPinnedTimes: (times) => set({ pinnedTimes: times }),
       clearPinnedTime: (placeId) =>
         set((s) => {
           const { [placeId]: _dropped, ...rest } = s.pinnedTimes;
