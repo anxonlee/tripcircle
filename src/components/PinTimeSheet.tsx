@@ -93,9 +93,19 @@ export function PinTimeSheet({
             {formatTime(homeByMin)}. Widen the day to pin a time outside it.
           </Text>
 
+          {/*
+            Three labels rather than two. "Change to 13:00" on a sheet where
+            nothing has been changed is a button describing an action it is
+            not about to take — opening the sheet to check a time and
+            leaving it alone is the commonest thing to do here.
+          */}
           <Pressable style={styles.done} onPress={() => onPin(value)}>
             <Text style={styles.doneText}>
-              {pinned === undefined ? 'Pin this time' : 'Change to ' + formatTime(value)}
+              {pinned === undefined
+                ? 'Pin this time'
+                : value === pinned
+                  ? `Keep ${formatTime(value)}`
+                  : `Change to ${formatTime(value)}`}
             </Text>
           </Pressable>
           {/*
