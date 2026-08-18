@@ -109,6 +109,24 @@ export interface OptimizeInput {
    * between the user and a locked door.
    */
   fixedOrder?: boolean;
+  /**
+   * Times the user fixed by hand, place id to minutes since midnight
+   * (PRD F6, §3.4).
+   *
+   * A pin means "be there at 12:30", not "no earlier than 12:30": the day
+   * waits if it arrives early and says so if it arrives late. The two read
+   * as different requests but only one of them needs building — a table
+   * booked for 19:00 and a museum tour that must not be missed both want
+   * the same thing, which is for the plan to hold the slot and to admit it
+   * when it cannot.
+   *
+   * Deliberately not a constraint the construction stage solves for. A pin
+   * is rare, usually singular, and the cost of threading it through the
+   * weight matrix is paid on every day that has none. `repairPinnedTimes`
+   * fixes the order afterwards instead, which is how closing times are
+   * already handled and is accurate for the one or two pins a real day has.
+   */
+  pinnedTimes?: ReadonlyMap<string, number>;
 }
 
 export interface PlannedStop {
@@ -122,6 +140,12 @@ export interface PlannedStop {
   beginMin: number;
   departMin: number;
   waitMin: number;
+  /**
+   * The time the user pinned to this stop, if they pinned one. Carried on
+   * the stop so the screen can mark it without re-reading the store and
+   * risking a plan and a badge that disagree.
+   */
+  pinnedMin?: number;
   warnings: string[];
 }
 
@@ -356,6 +380,12 @@ interface Schedule {
   returnLeg: LegEstimate | null;
   homeMin: number;
   hardClosingViolations: number;
+  /**
+   * Total minutes by which pinned stops are missed. Summed rather than
+   * counted: two stops five minutes late is a day worth keeping, and one
+   * stop two hours late is not, and a count says those are the same.
+   */
+  pinLatenessMin: number;
 }
 
 /**
@@ -373,6 +403,7 @@ function schedule(
   let t = dayStartMin;
   let prevLoc = startPlace.location;
   let hardClosingViolations = 0;
+  let pinLatenessMin = 0;
 
   const pickLeg = (from: LatLng, to: LatLng, legIndex: number): LegEstimate => {
     const options = legOptions(from, to);
@@ -388,14 +419,37 @@ function schedule(
     const leg = pickLeg(prevLoc, place.location, i);
     const arriveMin = t + leg.durationMin;
     const warnings: string[] = [];
-    let waitMin = 0;
+    let openWaitMin = 0;
     if (place.openHours && arriveMin < place.openHours.open) {
-      waitMin = place.openHours.open - arriveMin;
-      if (waitMin >= 15) {
-        warnings.push(`${place.name} ${usually(place)}opens at ${formatTime(place.openHours.open)} — ${waitMin} min wait`);
+      openWaitMin = place.openHours.open - arriveMin;
+      if (openWaitMin >= 15) {
+        warnings.push(`${place.name} ${usually(place)}opens at ${formatTime(place.openHours.open)} — ${openWaitMin} min wait`);
       }
     }
-    const beginMin = arriveMin + waitMin;
+    /**
+     * When the visit could start if nothing were pinned — after the journey
+     * and after the doors open. A pin can only push this later, never pull
+     * it earlier, which is why the two waits are counted separately: the
+     * opening-hours message above quotes a number the user can check
+     * against the door, and a pin's own waiting is not that number.
+     */
+    const readyMin = arriveMin + openWaitMin;
+    const pinnedMin = input.pinnedTimes?.get(place.id);
+    const beginMin =
+      pinnedMin === undefined ? readyMin : Math.max(readyMin, pinnedMin);
+    /**
+     * A missed pin has to be said out loud. Nothing else on the row would
+     * show it: the stop would simply print a different time from the one
+     * the user set, which reads as the app having forgotten rather than as
+     * a day that cannot hold the slot.
+     */
+    if (pinnedMin !== undefined && readyMin > pinnedMin) {
+      pinLatenessMin += readyMin - pinnedMin;
+      warnings.push(
+        `${readyMin - pinnedMin} min later than the ${formatTime(pinnedMin)} you set for ${place.name}`
+      );
+    }
+    const waitMin = beginMin - arriveMin;
     if (place.openHours) {
       if (beginMin >= place.openHours.close) {
         hardClosingViolations++;
@@ -415,6 +469,7 @@ function schedule(
       beginMin,
       departMin,
       waitMin,
+      pinnedMin,
       warnings,
     });
     t = departMin;
@@ -424,7 +479,7 @@ function schedule(
   const returnLeg =
     order.length > 0 ? pickLeg(prevLoc, startPlace.location, order.length) : null;
   const homeMin = returnLeg ? t + returnLeg.durationMin : t;
-  return { stops, returnLeg, homeMin, hardClosingViolations };
+  return { stops, returnLeg, homeMin, hardClosingViolations, pinLatenessMin };
 }
 
 /**
@@ -465,6 +520,82 @@ function repairClosingViolations(
       ) {
         best = candidate;
         bestViolations = candSched.hardClosingViolations;
+        bestWeight = candWeight;
+      }
+    }
+    if (best === current) break; // no improving move found
+    current = best;
+  }
+  return current;
+}
+
+/**
+ * If a pinned stop is reached after its time, try moving it earlier.
+ *
+ * The third repair, and the only one answering a constraint the user set
+ * rather than one the world imposed. That difference decides the tie-break
+ * order below: a missed pin outranks tour weight, because a shorter day that
+ * misses the table booked for 19:00 is not a better day.
+ *
+ * Same shape as `repairClosingViolations` deliberately — greedy, bounded by
+ * the number of stops, and it moves one stop at a time. It will not find the
+ * arrangement that needs two stops swapped around each other, and that is an
+ * accepted limit: a real day carries one or two pins, and the alternative is
+ * a constraint solver whose cost is paid by every day that pins nothing.
+ *
+ * A pin that no order can meet is left alone and reported. There is no
+ * arrangement that makes a 30-minute journey take 10, and quietly dropping
+ * the stop to make the numbers work would be the one outcome worse than
+ * saying so.
+ */
+function repairPinnedTimes(
+  input: OptimizeInput,
+  order: CuratedPlace[],
+  w: Weights,
+  indexOf: Map<CuratedPlace, number>
+): CuratedPlace[] {
+  if (!input.pinnedTimes || input.pinnedTimes.size === 0) return order;
+  let current = [...order];
+  for (let pass = 0; pass < current.length; pass++) {
+    const sched = schedule(input, current, new Map());
+    if (sched.pinLatenessMin === 0) break;
+    // The last late stop, not the first. Lateness accumulates forwards, so
+    // the one furthest along is carrying every delay before it and has the
+    // most to gain from moving.
+    let latePos = -1;
+    sched.stops.forEach((s, i) => {
+      if (s.pinnedMin !== undefined && s.beginMin > s.pinnedMin) latePos = i;
+    });
+    if (latePos <= 0) break; // already first, or none — nothing earlier to try
+    let best = current;
+    let bestLateness = sched.pinLatenessMin;
+    let bestClosing = sched.hardClosingViolations;
+    let bestWeight = Infinity;
+    for (let pos = 0; pos < latePos; pos++) {
+      const candidate = [...current];
+      const [moved] = candidate.splice(latePos, 1);
+      candidate.splice(pos, 0, moved);
+      const cand = schedule(input, candidate, new Map());
+      const candWeight = tourWeight(
+        candidate.map((p) => indexOf.get(p)!),
+        w
+      );
+      // Never buy punctuality with a locked door: a stop reached after
+      // closing is not a stop at all, where a late arrival is still a
+      // visit. Closing violations therefore gate the move rather than
+      // trading against it.
+      if (cand.hardClosingViolations > bestClosing) continue;
+      if (
+        cand.pinLatenessMin < bestLateness ||
+        (cand.pinLatenessMin === bestLateness &&
+          cand.hardClosingViolations < bestClosing) ||
+        (cand.pinLatenessMin === bestLateness &&
+          cand.hardClosingViolations === bestClosing &&
+          candWeight < bestWeight)
+      ) {
+        best = candidate;
+        bestLateness = cand.pinLatenessMin;
+        bestClosing = cand.hardClosingViolations;
         bestWeight = candWeight;
       }
     }
@@ -597,6 +728,7 @@ function latestSafeStart(
     let order = twoOpt(nearestNeighborTour(w), w).map((i) => input.places[i - 1]);
     order = repairClosingViolations(at, order, w, indexOf);
     order = repairLongWaits(at, order, w, indexOf);
+    order = repairPinnedTimes(at, order, w, indexOf);
     return schedule(at, order, new Map());
   };
 
@@ -610,7 +742,12 @@ function latestSafeStart(
    */
   const safe = (s: Schedule) =>
     s.hardClosingViolations <= current.hardClosingViolations &&
-    s.homeMin <= current.homeMin;
+    s.homeMin <= current.homeMin &&
+    // Nor may a pin be missed to save waiting. Waiting for a table booked
+    // at 19:00 is the point of pinning it, and the search would otherwise
+    // read that wait as the very waste it exists to remove — leaving later
+    // and arriving after the slot is gone.
+    s.pinLatenessMin <= current.pinLatenessMin;
 
   /**
    * Binary search rather than a scan. Every quantity involved moves one way
@@ -776,6 +913,9 @@ export function optimizeDay(rawInput: OptimizeInput): DayPlan {
     //    early to be let in.
     order = repairClosingViolations(input, order, w, indexOf);
     order = repairLongWaits(input, order, w, indexOf);
+    // Last, so it works on the order the hours repairs settled on. A pin is
+    // the user's own constraint and gets the final say over sequence.
+    order = repairPinnedTimes(input, order, w, indexOf);
   }
 
   // 3. Schedule. Every leg's mode was already chosen by the goal, so there is

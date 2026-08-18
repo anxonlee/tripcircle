@@ -818,3 +818,179 @@ describe('car availability', () => {
     expect(without(ferryBuilding, jackLondon).map((o) => o.mode)).not.toContain('drive');
   });
 });
+
+describe('pinned times', () => {
+  const pins = (entries: Record<string, number>) =>
+    new Map(Object.entries(entries));
+
+  it('holds the slot rather than arriving whenever it arrives', () => {
+    const plan = optimizeDay(
+      baseInput({
+        places: [makePlace('lunch', 0.004)],
+        pinnedTimes: pins({ lunch: 13 * 60 }),
+      })
+    );
+    expect(plan.stops[0].beginMin).toBe(13 * 60);
+  });
+
+  it('counts the hold as waiting, not as a shorter journey', () => {
+    // The user is standing about either way; a total that hid it would make
+    // a pinned day look cheaper than it is.
+    const plan = optimizeDay(
+      baseInput({
+        places: [makePlace('lunch', 0.004)],
+        pinnedTimes: pins({ lunch: 13 * 60 }),
+      })
+    );
+    expect(plan.totals.waitMin).toBe(
+      plan.stops[0].beginMin - plan.stops[0].arriveMin
+    );
+    expect(plan.totals.waitMin).toBeGreaterThan(0);
+  });
+
+  it('never pulls a visit earlier than the day can reach it', () => {
+    const plan = optimizeDay(
+      baseInput({
+        places: [makePlace('far', 0.05)],
+        pinnedTimes: pins({ far: 9 * 60 }),
+        dayStartMin: 9 * 60,
+      })
+    );
+    expect(plan.stops[0].beginMin).toBeGreaterThan(9 * 60);
+  });
+
+  it('says how late it is when the pin cannot be met', () => {
+    const plan = optimizeDay(
+      baseInput({
+        places: [makePlace('far', 0.05)],
+        pinnedTimes: pins({ far: 9 * 60 }),
+        dayStartMin: 9 * 60,
+      })
+    );
+    const late = plan.stops[0].beginMin - 9 * 60;
+    expect(plan.warnings.join(' ')).toContain(`${late} min later than the 9:00`);
+  });
+
+  it('is quiet when the pin is met', () => {
+    const plan = optimizeDay(
+      baseInput({
+        places: [makePlace('lunch', 0.004)],
+        pinnedTimes: pins({ lunch: 13 * 60 }),
+      })
+    );
+    expect(plan.warnings.join(' ')).not.toContain('later than');
+  });
+
+  it('reorders the day so a pinned stop is reached in time', () => {
+    // Left alone the optimiser visits these nearest-first, which puts the
+    // pinned stop last and hours past its time.
+    const places = [
+      makePlace('near', 0.004, { visitDurationMin: 120 }),
+      makePlace('middle', 0.02, { visitDurationMin: 120 }),
+      makePlace('booked', 0.04, { visitDurationMin: 60 }),
+    ];
+    const unpinned = optimizeDay(baseInput({ places, homeByMin: 23 * 60 }));
+    expect(unpinned.stops[unpinned.stops.length - 1].place.id).toBe('booked');
+
+    const pinned = optimizeDay(
+      baseInput({
+        places,
+        homeByMin: 23 * 60,
+        pinnedTimes: pins({ booked: 10 * 60 }),
+      })
+    );
+    expect(pinned.stops[0].place.id).toBe('booked');
+    expect(pinned.stops[0].beginMin).toBe(10 * 60);
+  });
+
+  it('leaves an impossible pin where it is rather than dropping the stop', () => {
+    // No arrangement makes the journey shorter, so the honest output is the
+    // stop, still in the day, with the shortfall named.
+    const places = [makePlace('a', 0.004), makePlace('impossible', 0.05)];
+    const plan = optimizeDay(
+      baseInput({
+        places,
+        dayStartMin: 9 * 60,
+        pinnedTimes: pins({ impossible: 9 * 60 + 5 }),
+      })
+    );
+    expect(plan.stops.map((s) => s.place.id)).toContain('impossible');
+    expect(plan.warnings.join(' ')).toContain('later than the 9:05');
+  });
+
+  it('does not miss a pin to save waiting elsewhere', () => {
+    // The departure stage moves the day later when that cuts idle time. A
+    // pinned stop's wait looks exactly like idle time to it, and leaving
+    // later is precisely how the slot gets missed.
+    const places = [
+      makePlace('early', 0.004),
+      makePlace('booked', 0.01, { visitDurationMin: 60 }),
+    ];
+    const plan = optimizeDay(
+      baseInput({
+        places,
+        dayStartMin: 9 * 60,
+        homeByMin: 22 * 60,
+        pinnedTimes: pins({ booked: 11 * 60 }),
+      })
+    );
+    const booked = plan.stops.find((s) => s.place.id === 'booked')!;
+    expect(booked.beginMin).toBe(11 * 60);
+  });
+
+  it('respects an arrangement the user made, and warns instead of fixing it', () => {
+    const places = [
+      makePlace('first', 0.004, { visitDurationMin: 180 }),
+      makePlace('booked', 0.01),
+    ];
+    const plan = optimizeDay(
+      baseInput({
+        places,
+        fixedOrder: true,
+        dayStartMin: 9 * 60,
+        homeByMin: 23 * 60,
+        pinnedTimes: pins({ booked: 10 * 60 }),
+      })
+    );
+    expect(plan.stops.map((s) => s.place.id)).toEqual(['first', 'booked']);
+    expect(plan.warnings.join(' ')).toContain('later than the 10:00');
+  });
+
+  it('carries the pin on the stop so the screen need not re-derive it', () => {
+    const plan = optimizeDay(
+      baseInput({
+        places: [makePlace('lunch', 0.004), makePlace('other', 0.01)],
+        pinnedTimes: pins({ lunch: 13 * 60 }),
+      })
+    );
+    expect(plan.stops.find((s) => s.place.id === 'lunch')!.pinnedMin).toBe(13 * 60);
+    expect(plan.stops.find((s) => s.place.id === 'other')!.pinnedMin).toBeUndefined();
+  });
+
+  it('waits for the doors, not just for the clock', () => {
+    // A pin before opening does not get anyone in early.
+    const plan = optimizeDay(
+      baseInput({
+        places: [
+          makePlace('museum', 0.004, { openHours: { open: 11 * 60, close: 17 * 60 } }),
+        ],
+        dayStartMin: 9 * 60,
+        pinnedTimes: pins({ museum: 10 * 60 }),
+      })
+    );
+    expect(plan.stops[0].beginMin).toBe(11 * 60);
+    expect(plan.warnings.join(' ')).toContain('later than the 10:00');
+  });
+
+  it('changes nothing for a day with no pins', () => {
+    const places = [makePlace('a', 0.03), makePlace('b', 0.004), makePlace('c', 0.014)];
+    const withOut = optimizeDay(baseInput({ places, homeByMin: 23 * 60 }));
+    const withEmpty = optimizeDay(
+      baseInput({ places, homeByMin: 23 * 60, pinnedTimes: new Map() })
+    );
+    expect(withEmpty.stops.map((s) => s.place.id)).toEqual(
+      withOut.stops.map((s) => s.place.id)
+    );
+    expect(withEmpty.homeMin).toBe(withOut.homeMin);
+  });
+});
