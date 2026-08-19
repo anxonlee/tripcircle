@@ -35,11 +35,21 @@ export function makeStartPlace(landmark: Landmark): StartPlace {
   };
 }
 
-/** Minutes-since-midnight → "9:05" / "17:30" display string. */
+/**
+ * Minutes-since-midnight → "9:05" / "17:30" display string.
+ *
+ * Rounded to the minute BEFORE the hour is taken. Rounding the two halves
+ * independently is what prints "9:60": 599.6 floors to hour 9 while its 59.6
+ * remaining minutes round to 60. Both routing providers currently ceil their
+ * durations, so nothing fractional reaches here today — which is exactly why
+ * the guard belongs in the formatter rather than in the callers, where it
+ * survives only as long as every future one remembers.
+ */
 export function formatTime(minutes: number): string {
-  const m = ((minutes % 1440) + 1440) % 1440;
+  const rounded = Math.round(minutes);
+  const m = ((rounded % 1440) + 1440) % 1440;
   const h = Math.floor(m / 60);
-  const mm = String(Math.round(m % 60)).padStart(2, '0');
+  const mm = String(m % 60).padStart(2, '0');
   return `${h}:${mm}`;
 }
 
