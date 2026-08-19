@@ -22,8 +22,9 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { categoryIcon } from '../components/icons';
 import { PlaceHistory } from '../components/PlaceHistory';
+import { ContextTagPicker } from '../components/ContextTagPicker';
 import { StarRating } from '../components/StarRating';
-import { visitTimeline, type WouldGoAgain } from '../domain/diary';
+import { visitTimeline, type ContextTags, type WouldGoAgain } from '../domain/diary';
 import type { CuratedPlace } from '../domain/types';
 import type { RootStackParamList } from '../navigation';
 import { locationService } from '../services/location';
@@ -86,6 +87,7 @@ export function StampScreen({ navigation, route }: Props) {
 
   // Optional extras, gathered before the committing tap.
   const [rating, setRating] = useState<number | null>(null);
+  const [tags, setTags] = useState<ContextTags>({});
   const [note, setNote] = useState('');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
 
@@ -112,6 +114,7 @@ export function StampScreen({ navigation, route }: Props) {
       setRating(null);
       setNote('');
       setPhotoUri(null);
+      setTags({});
     }
     setPlace(p);
   };
@@ -178,6 +181,10 @@ export function StampScreen({ navigation, route }: Props) {
       ...(rating != null ? { rating } : {}),
       ...(note.trim() ? { note: note.trim() } : {}),
       ...(photoUri ? { photoUri } : {}),
+      // Omitted entirely when nothing was chosen, rather than stored as an
+      // object full of undefined — an absent answer should look absent in
+      // the log too.
+      ...(tags.companion || tags.pace ? { contextTags: tags } : {}),
     });
     // Stamping from Start day returns to the stop it came from, so the user
     // carries on with the day. Stamping from the tab bar goes to the wall,
@@ -315,6 +322,8 @@ export function StampScreen({ navigation, route }: Props) {
                 </Pressable>
 
                 <StarRating value={rating} onChange={setRating} />
+
+                <ContextTagPicker value={tags} onChange={setTags} />
 
                 <View style={styles.noteWrap}>
                   <TextInput

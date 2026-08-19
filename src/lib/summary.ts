@@ -1,4 +1,4 @@
-import { aggregateAll, type Visit } from '../domain/diary';
+import { aggregateAll, type ContextTags, type Visit } from '../domain/diary';
 import type { Category, CuratedPlace, District } from '../domain/types';
 
 /**
@@ -40,6 +40,11 @@ export interface PeriodSummary {
   /** Themes touched, most frequent first. */
   themes: { theme: Category; count: number }[];
   photoCount: number;
+  /**
+   * Who the user was with, most frequent first, counting only the visits
+   * they said. Absent answers are not a category — see `ContextTagPicker`.
+   */
+  companions: { companion: NonNullable<ContextTags['companion']>; count: number }[];
   /** Places answered "yes" in the window — its highlights. */
   goAgain: CuratedPlace[];
   /** The forward hook (§3A.4): somewhere loved but not visited in a while. */
@@ -117,9 +122,16 @@ export function summarize(
   const districts = new Set<District>();
   const themeCounts = new Map<Category, number>();
   const goAgainIds = new Set<string>();
+  const companionCounts = new Map<NonNullable<ContextTags['companion']>, number>();
   let photoCount = 0;
 
   for (const v of inPeriod) {
+    // Counted before the place lookup: who someone was with is a fact about
+    // the visit, and it survives the place having left the dataset.
+    const companion = v.contextTags?.companion;
+    if (companion) {
+      companionCounts.set(companion, (companionCounts.get(companion) ?? 0) + 1);
+    }
     const place = byId.get(v.placeId);
     if (!place) continue;
     districts.add(place.district);
@@ -156,6 +168,9 @@ export function summarize(
       .map(([theme, count]) => ({ theme, count }))
       .sort((a, b) => b.count - a.count || a.theme.localeCompare(b.theme)),
     photoCount,
+    companions: [...companionCounts.entries()]
+      .map(([companion, count]) => ({ companion, count }))
+      .sort((a, b) => b.count - a.count || a.companion.localeCompare(b.companion)),
     goAgain: [...goAgainIds].map((id) => byId.get(id)).filter((p): p is CuratedPlace => !!p),
     overdue: findOverdue(places, visits, now),
   };

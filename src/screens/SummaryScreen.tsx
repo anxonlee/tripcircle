@@ -45,6 +45,14 @@ function rangeLabel(period: Period, startMs: number, endMs: number): string {
   return `${left} – ${right}`;
 }
 
+/** Sentence case, because these read as a list rather than as controls. */
+const COMPANION_LABELS: Record<string, string> = {
+  solo: 'Solo',
+  date: 'On a date',
+  family: 'Family',
+  friends: 'Friends',
+};
+
 const PERIODS: { id: Period; label: string; heading: string; empty: string }[] = [
   {
     id: 'week',
@@ -202,6 +210,16 @@ export function SummaryScreen({ embedded = false }: { embedded?: boolean } = {})
                     <Text style={styles.body}>{p.name}</Text>
                   </View>
                 ))}
+              </Section>
+            )}
+
+            {summary.companions.length > 0 && (
+              <Section title="Who you were with">
+                <Text style={styles.body}>
+                  {summary.companions
+                    .map((c) => `${COMPANION_LABELS[c.companion]} ×${c.count}`)
+                    .join(' · ')}
+                </Text>
               </Section>
             )}
 

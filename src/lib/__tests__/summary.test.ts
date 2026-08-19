@@ -177,6 +177,39 @@ describe('summarize', () => {
     );
   });
 
+  it('counts who you were with, commonest first', () => {
+    const visits = [
+      visit('a', at(2026, 8, 17), { contextTags: { companion: 'friends' } }),
+      visit('b', at(2026, 8, 18), { contextTags: { companion: 'friends' } }),
+      visit('c', at(2026, 8, 19), { contextTags: { companion: 'solo' } }),
+    ];
+    expect(summarize(PLACES, visits, 'week', now).companions).toEqual([
+      { companion: 'friends', count: 2 },
+      { companion: 'solo', count: 1 },
+    ]);
+  });
+
+  it('does not invent a category for visits that said nothing', () => {
+    // Unset means the user did not say, which is not the same as alone.
+    const visits = [
+      visit('a', at(2026, 8, 17)),
+      visit('b', at(2026, 8, 18), { contextTags: { pace: 'relaxed' } }),
+      visit('c', at(2026, 8, 19), { contextTags: { companion: 'date' } }),
+    ];
+    expect(summarize(PLACES, visits, 'week', now).companions).toEqual([
+      { companion: 'date', count: 1 },
+    ]);
+  });
+
+  it('still counts the company when the place has gone', () => {
+    const visits = [
+      visit('gone', at(2026, 8, 18), { contextTags: { companion: 'family' } }),
+    ];
+    const s = summarize(PLACES, visits, 'week', now);
+    expect(s.districts).toEqual([]);
+    expect(s.companions).toEqual([{ companion: 'family', count: 1 }]);
+  });
+
   it('carries the forward hook whatever the period', () => {
     // Overdue is about the place, not the window — a year's recap should
     // still say what has gone unvisited.

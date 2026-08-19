@@ -11,11 +11,13 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ContextTagPicker } from '../components/ContextTagPicker';
 import { StarRating } from '../components/StarRating';
 import {
   canEditVisit,
   editWindowLeft,
   visitPlaceName,
+  type ContextTags,
   type WouldGoAgain,
 } from '../domain/diary';
 import type { RootStackParamList } from '../navigation';
@@ -63,6 +65,7 @@ export function EditVisitScreen({ navigation, route }: Props) {
 
   const [note, setNote] = useState(visit?.note ?? '');
   const [rating, setRating] = useState<number | null>(visit?.rating ?? null);
+  const [tags, setTags] = useState<ContextTags>(visit?.contextTags ?? {});
   const [goAgain, setGoAgain] = useState<WouldGoAgain>(
     visit?.wouldGoAgain ?? 'yes'
   );
@@ -84,6 +87,7 @@ export function EditVisitScreen({ navigation, route }: Props) {
       // than skipping the key.
       note: note.trim() ? note.trim() : undefined,
       rating: rating ?? undefined,
+      contextTags: tags.companion || tags.pace ? tags : undefined,
     });
     navigation.goBack();
   };
@@ -133,6 +137,8 @@ export function EditVisitScreen({ navigation, route }: Props) {
         ) : null}
 
         <StarRating value={rating} onChange={editable ? setRating : () => {}} />
+
+        <ContextTagPicker value={tags} onChange={setTags} editable={editable} />
 
         <View style={styles.noteWrap}>
           <TextInput
