@@ -4,6 +4,7 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import {
   canEditVisit,
   newVisitId,
+  type ContextTags,
   type Visit,
   type WouldGoAgain,
 } from '../domain/diary';
@@ -34,6 +35,7 @@ export interface StampDraft {
   rating?: number;
   note?: string;
   photoUri?: string;
+  contextTags?: ContextTags;
 }
 
 interface DiaryState {
@@ -66,6 +68,7 @@ export const useDiaryStore = create<DiaryState>()(
           ...(draft.rating != null ? { rating: draft.rating } : {}),
           ...(draft.note ? { note: draft.note } : {}),
           ...(draft.photoUri ? { photoUri: draft.photoUri } : {}),
+          ...(draft.contextTags ? { contextTags: draft.contextTags } : {}),
         };
         set((s) => ({
           visits: [...s.visits, visit],
