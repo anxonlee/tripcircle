@@ -1,5 +1,12 @@
 import { File, Paths } from 'expo-file-system';
 import type { Visit } from '../domain/diary';
+import {
+  BACKUP_FORMAT,
+  BACKUP_VERSION,
+  mergeVisits,
+  parseBackup,
+  type BackupPhoto,
+} from '../lib/diaryRestore';
 import { restoreVisitPhoto } from './photoStore';
 
 /**
@@ -25,20 +32,10 @@ import { restoreVisitPhoto } from './photoStore';
  * written now still restores on an older install, and a file written by an
  * older install still restores here.
  *
- * Nothing about which files are accepted changed. Only which name is written.
+ * The names and the reading of them live in `lib/diaryRestore`, which is
+ * pure and therefore testable — a backup is the one input this app does not
+ * write itself, and it was the one input with no tests.
  */
-const FORMAT = 'tripcircle.diary';
-/** Names earlier builds wrote. Still restorable, and must stay that way. */
-const LEGACY_FORMATS = ['pirt.diary'];
-const VERSION = 1;
-
-interface BackupPhoto {
-  visitId: string;
-  /** File extension including the dot, e.g. '.heic'. */
-  extension: string;
-  base64: string;
-}
-
 interface BackupFile {
   format: string;
   version: number;
@@ -49,8 +46,13 @@ interface BackupFile {
 
 export interface ImportSummary {
   added: number;
+  /** Already in the diary — the same file restored twice. */
   skipped: number;
   photosRestored: number;
+  /** Rows that were not visits and could not be salvaged. */
+  dropped: number;
+  /** Visits kept with a field repaired, e.g. an unreadable answer. */
+  repaired: number;
 }
 
 /**
@@ -78,8 +80,8 @@ export async function exportDiary(visits: Visit[]): Promise<string> {
   }
 
   const payload: BackupFile = {
-    format: FORMAT,
-    version: VERSION,
+    format: BACKUP_FORMAT,
+    version: BACKUP_VERSION,
     exportedAt: new Date().toISOString(),
     visits,
     photos,
@@ -106,53 +108,43 @@ export async function importDiary(
   existing: Visit[]
 ): Promise<{ visits: Visit[]; summary: ImportSummary }> {
   const raw = await new File(fileUri).text();
-  const parsed = JSON.parse(raw) as Partial<BackupFile>;
-
-  const recognised =
-    parsed.format === FORMAT ||
-    (typeof parsed.format === 'string' && LEGACY_FORMATS.includes(parsed.format));
-  if (!recognised || !Array.isArray(parsed.visits)) {
-    throw new Error('That file is not a PIRT diary export.');
-  }
-  if ((parsed.version ?? 0) > VERSION) {
-    throw new Error('That backup was made by a newer version of the app.');
-  }
+  const { visits: incoming, photos, dropped, repaired } = parseBackup(raw);
 
   const known = new Set(existing.map((v) => v.id));
-  const photosByVisit = new Map(
-    (parsed.photos ?? []).map((p) => [p.visitId, p] as const)
-  );
-
-  const added: Visit[] = [];
+  const fresh: Visit[] = [];
   let photosRestored = 0;
-  for (const visit of parsed.visits) {
+
+  for (const visit of incoming) {
     if (known.has(visit.id)) continue;
-    // The exported photoUri points into the container this backup came from,
-    // which no longer exists here. Either we rewrite it to a restored file or
-    // we drop it — never carry the dead path across.
-    const { photoUri: _stale, ...visitWithoutPhoto } = visit;
-    const photo = photosByVisit.get(visit.id);
+    const photo = photos.get(visit.id);
     if (!photo) {
-      added.push(visitWithoutPhoto);
+      fresh.push(visit);
       continue;
     }
     try {
-      added.push({
-        ...visitWithoutPhoto,
+      fresh.push({
+        ...visit,
         photoUri: restoreVisitPhoto(photo.extension, photo.base64),
       });
       photosRestored += 1;
     } catch {
-      added.push(visitWithoutPhoto);
+      // A photo that will not write should not cost the user the visit.
+      fresh.push(visit);
     }
   }
 
   return {
-    visits: [...existing, ...added].sort((a, b) => a.timestamp - b.timestamp),
+    visits: mergeVisits(existing, fresh),
     summary: {
-      added: added.length,
-      skipped: parsed.visits.length - added.length,
+      added: fresh.length,
+      // Counted against what parsed, not against the file's row count:
+      // rows that were never visits are `dropped`, and calling those
+      // "already here" would tell the user their diary contains junk it
+      // does not.
+      skipped: incoming.length - fresh.length,
       photosRestored,
+      dropped,
+      repaired,
     },
   };
 }

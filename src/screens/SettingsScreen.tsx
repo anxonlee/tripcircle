@@ -153,8 +153,21 @@ export function SettingsScreen() {
       replaceVisits(merged);
       Alert.alert(
         'Diary restored',
-        `${report.added} added, ${report.skipped} already here` +
-          (report.photosRestored > 0 ? `, ${report.photosRestored} photos` : '')
+        [
+          `${report.added} added, ${report.skipped} already here` +
+            (report.photosRestored > 0 ? `, ${report.photosRestored} photos` : ''),
+          // Said out loud rather than absorbed. A restore that quietly
+          // discarded rows would have the user believe they got everything
+          // back, which is the worst moment to be wrong about.
+          report.dropped > 0
+            ? `${report.dropped} ${report.dropped === 1 ? 'entry' : 'entries'} in the file could not be read and ${report.dropped === 1 ? 'was' : 'were'} left out.`
+            : null,
+          report.repaired > 0
+            ? `${report.repaired} had an answer we could not read, kept as "maybe".`
+            : null,
+        ]
+          .filter(Boolean)
+          .join('\n\n')
       );
     } catch (e) {
       Alert.alert('Restore failed', String(e instanceof Error ? e.message : e));

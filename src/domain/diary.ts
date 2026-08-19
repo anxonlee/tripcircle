@@ -133,7 +133,14 @@ export function aggregateVisits(
   let photoCount = 0;
 
   for (const v of mine) {
-    goAgain[v.wouldGoAgain] += 1;
+    /*
+     * Only the three answers we know. A restored backup is a file the user
+     * could have edited, and `goAgain[answer] += 1` on an unknown key writes
+     * NaN under it — a number that then spreads silently through the ranking
+     * the planner reads. The visit still counts; only the unreadable opinion
+     * is dropped.
+     */
+    if (v.wouldGoAgain in goAgain) goAgain[v.wouldGoAgain] += 1;
     if (v.timestamp > lastVisitedAt) lastVisitedAt = v.timestamp;
     if (typeof v.rating === 'number') {
       ratingSum += v.rating;
