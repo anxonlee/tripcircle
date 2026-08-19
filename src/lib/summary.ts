@@ -9,25 +9,38 @@ import type { Category, CuratedPlace, District } from '../domain/types';
  * deliberate act: this module produces data, and nothing here posts,
  * uploads, or exposes a location.
  *
- * Monthly and yearly recaps are Phase 2; the week is the MVP's cadence.
+ * The week was the MVP's cadence; month and year arrived with Phase 2 and are
+ * the same summary over a longer window rather than a different report. That
+ * is deliberate — a year that counted different things could not be compared
+ * with the weeks that made it up.
  */
 
 const DAY_MS = 86_400_000;
 
-export interface WeekSummary {
+/**
+ * How far back a recap reaches.
+ *
+ * Calendar periods, not rolling ones: "this month" is the month on the wall,
+ * because that is the month the user means. A rolling 30 days would be more
+ * even and would never line up with anything they remember.
+ */
+export type Period = 'week' | 'month' | 'year';
+
+export interface PeriodSummary {
+  period: Period;
   /** Inclusive start / exclusive end, epoch ms. */
   startMs: number;
   endMs: number;
   visitCount: number;
-  /** Distinct places stamped this week. */
+  /** Distinct places stamped in the window. */
   placeCount: number;
-  /** Places stamped this week that had never been stamped before. */
+  /** Places stamped in the window that had never been stamped before. */
   newPlaceCount: number;
   districts: District[];
   /** Themes touched, most frequent first. */
   themes: { theme: Category; count: number }[];
   photoCount: number;
-  /** Places answered "yes" this week — the week's highlights. */
+  /** Places answered "yes" in the window — its highlights. */
   goAgain: CuratedPlace[];
   /** The forward hook (§3A.4): somewhere loved but not visited in a while. */
   overdue: { place: CuratedPlace; daysSince: number } | null;
@@ -42,29 +55,71 @@ export function startOfWeek(now: number): number {
   return d.getTime() - daysSinceMonday * DAY_MS;
 }
 
+/**
+ * The window a period covers, as [start, end).
+ *
+ * Month and year are built with `Date` rather than by adding days, because
+ * neither has a fixed length: months run 28 to 31 days, and a clock change
+ * inside the window makes even a "31 day" month 30 days and 23 hours. Adding
+ * `31 * DAY_MS` would put the boundary an hour into the next month twice a
+ * year, which is the kind of bug that only shows up in October.
+ *
+ * The week keeps its day arithmetic, and the same caveat applies to it in a
+ * milder form: a clock change moves the end by an hour, which cannot move a
+ * visit across the boundary because the boundary is midnight local either
+ * way.
+ */
+export function periodRange(
+  period: Period,
+  now: number = Date.now()
+): { startMs: number; endMs: number } {
+  const d = new Date(now);
+  if (period === 'week') {
+    const startMs = startOfWeek(now);
+    return { startMs, endMs: startMs + 7 * DAY_MS };
+  }
+  if (period === 'month') {
+    const start = new Date(d.getFullYear(), d.getMonth(), 1);
+    const end = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+    return { startMs: start.getTime(), endMs: end.getTime() };
+  }
+  const start = new Date(d.getFullYear(), 0, 1);
+  const end = new Date(d.getFullYear() + 1, 0, 1);
+  return { startMs: start.getTime(), endMs: end.getTime() };
+}
+
 /** How long a loved place must go unvisited before it counts as overdue. */
 const OVERDUE_DAYS = 60;
 
+/** The week, kept as its own name because most callers only want that one. */
 export function summarizeWeek(
   places: CuratedPlace[],
   visits: Visit[],
   now: number = Date.now()
-): WeekSummary {
-  const startMs = startOfWeek(now);
-  const endMs = startMs + 7 * DAY_MS;
+): PeriodSummary {
+  return summarize(places, visits, 'week', now);
+}
+
+export function summarize(
+  places: CuratedPlace[],
+  visits: Visit[],
+  period: Period = 'week',
+  now: number = Date.now()
+): PeriodSummary {
+  const { startMs, endMs } = periodRange(period, now);
   const byId = new Map(places.map((p) => [p.id, p]));
 
-  const thisWeek = visits.filter(
+  const inPeriod = visits.filter(
     (v) => v.timestamp >= startMs && v.timestamp < endMs
   );
 
-  const placeIds = new Set(thisWeek.map((v) => v.placeId));
+  const placeIds = new Set(inPeriod.map((v) => v.placeId));
   const districts = new Set<District>();
   const themeCounts = new Map<Category, number>();
   const goAgainIds = new Set<string>();
   let photoCount = 0;
 
-  for (const v of thisWeek) {
+  for (const v of inPeriod) {
     const place = byId.get(v.placeId);
     if (!place) continue;
     districts.add(place.district);
@@ -75,7 +130,9 @@ export function summarizeWeek(
     if (v.wouldGoAgain === 'yes') goAgainIds.add(v.placeId);
   }
 
-  // "New" means first ever stamped this week, judged against the whole log.
+  // "New" means first ever stamped inside the window, judged against the
+  // whole log — so a place first visited in March is not new again in the
+  // yearly recap that contains March.
   const firstSeen = new Map<string, number>();
   for (const v of visits) {
     const prev = firstSeen.get(v.placeId);
@@ -88,9 +145,10 @@ export function summarizeWeek(
   }
 
   return {
+    period,
     startMs,
     endMs,
-    visitCount: thisWeek.length,
+    visitCount: inPeriod.length,
     placeCount: placeIds.size,
     newPlaceCount,
     districts: [...districts],

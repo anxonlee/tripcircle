@@ -11,7 +11,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { summarizeWeek } from '../lib/summary';
+import { summarize, type Period } from '../lib/summary';
 import type { RootStackParamList } from '../navigation';
 import type { CuratedPlace } from '../domain/types';
 import { listPlacesForHistory } from '../services/places';
@@ -20,8 +20,22 @@ import { categoryLabels, colors } from '../theme/colors';
 
 const MONTHS = 'Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split(' ');
 
-function rangeLabel(startMs: number, endMs: number): string {
+const FULL_MONTHS =
+  'January February March April May June July August September October November December'.split(
+    ' '
+  );
+
+/**
+ * What the period is called.
+ *
+ * A month and a year are named, not bounded: "August 2026" is how someone
+ * refers to the month, where "Aug 1 – 31" reads as a report about it. Only
+ * the week has no name of its own, so only the week gets dates.
+ */
+function rangeLabel(period: Period, startMs: number, endMs: number): string {
   const a = new Date(startMs);
+  if (period === 'year') return String(a.getFullYear());
+  if (period === 'month') return `${FULL_MONTHS[a.getMonth()]} ${a.getFullYear()}`;
   const b = new Date(endMs - 1);
   const left = `${MONTHS[a.getMonth()]} ${a.getDate()}`;
   const right =
@@ -30,6 +44,27 @@ function rangeLabel(startMs: number, endMs: number): string {
       : `${MONTHS[b.getMonth()]} ${b.getDate()}`;
   return `${left} – ${right}`;
 }
+
+const PERIODS: { id: Period; label: string; heading: string; empty: string }[] = [
+  {
+    id: 'week',
+    label: 'Week',
+    heading: 'Your week in places',
+    empty: 'Nothing stamped this week yet. Your recap fills in as you go.',
+  },
+  {
+    id: 'month',
+    label: 'Month',
+    heading: 'Your month in places',
+    empty: 'Nothing stamped this month yet.',
+  },
+  {
+    id: 'year',
+    label: 'Year',
+    heading: 'Your year in places',
+    empty: 'Nothing stamped this year yet.',
+  },
+];
 
 /**
  * Weekly recap (PRD §3A.4, FD4).
@@ -55,11 +90,17 @@ export function SummaryScreen({ embedded = false }: { embedded?: boolean } = {})
     listPlacesForHistory().then(setPlaces);
   }, []);
 
-  const summary = useMemo(() => summarizeWeek(places, visits), [places, visits]);
+  const [period, setPeriod] = useState<Period>('week');
+  const meta = PERIODS.find((p) => p.id === period) ?? PERIODS[0];
+
+  const summary = useMemo(
+    () => summarize(places, visits, period),
+    [places, visits, period]
+  );
 
   const onShare = () => {
     const lines = [
-      `My week in places · ${rangeLabel(summary.startMs, summary.endMs)}`,
+      `${meta.heading} · ${rangeLabel(period, summary.startMs, summary.endMs)}`,
       `${summary.visitCount} visits across ${summary.placeCount} places`,
       summary.districts.length > 0 ? `${summary.districts.join(', ')}` : null,
       summary.goAgain.length > 0
@@ -75,9 +116,9 @@ export function SummaryScreen({ embedded = false }: { embedded?: boolean } = {})
     <View style={[styles.screen, { paddingTop: embedded ? 0 : insets.top }]}>
       <View style={styles.header}>
         <View>
-          <Text style={styles.title}>Your week in places</Text>
+          <Text style={styles.title}>{meta.heading}</Text>
           <Text style={styles.range}>
-            {rangeLabel(summary.startMs, summary.endMs)}
+            {rangeLabel(period, summary.startMs, summary.endMs)}
           </Text>
         </View>
         {!empty && (
@@ -91,6 +132,34 @@ export function SummaryScreen({ embedded = false }: { embedded?: boolean } = {})
         )}
       </View>
 
+      {/*
+        Under the header rather than over it, so the title reads as the
+        answer to the switch. Three segments and no swipe: the diary tab
+        already owns the horizontal gesture for Wall/Summary, and a second
+        pager inside it would fight the first.
+      */}
+      <View style={styles.periodBar}>
+        {PERIODS.map((p) => (
+          <Pressable
+            key={p.id}
+            onPress={() => setPeriod(p.id)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: p.id === period }}
+            accessibilityLabel={`${p.label} recap`}
+            style={[styles.periodSeg, p.id === period && styles.periodSegOn]}
+          >
+            <Text
+              style={[
+                styles.periodText,
+                p.id === period && styles.periodTextOn,
+              ]}
+            >
+              {p.label}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
       <ScrollView contentContainerStyle={styles.content}>
         {empty ? (
           <View style={styles.empty}>
@@ -99,9 +168,7 @@ export function SummaryScreen({ embedded = false }: { embedded?: boolean } = {})
               size={26}
               color={colors.textMuted}
             />
-            <Text style={styles.emptyText}>
-              Nothing stamped this week yet. Your recap fills in as you go.
-            </Text>
+            <Text style={styles.emptyText}>{meta.empty}</Text>
           </View>
         ) : (
           <>
@@ -188,6 +255,36 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.surface },
+  /*
+    The same recessed track the objective bar and the diary switch use, at
+    the smaller size this one earns: choosing a period is a lighter act than
+    choosing what the optimiser is for.
+  */
+  periodBar: {
+    flexDirection: 'row',
+    marginHorizontal: 16,
+    marginBottom: 4,
+    padding: 2,
+    borderRadius: 11,
+    backgroundColor: colors.surfaceAlt,
+  },
+  periodSeg: {
+    flex: 1,
+    height: 30,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  periodSegOn: {
+    backgroundColor: colors.surface,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 2,
+  },
+  periodText: { fontSize: 12, color: colors.textSecondary },
+  periodTextOn: { color: colors.textPrimary, fontWeight: '500' },
   backup: {
     marginTop: 8,
     padding: 14,
