@@ -77,7 +77,14 @@ export function formatDuration(min: number): string {
  * a diary reads better as "3w ago" than a date nobody can place.
  */
 export function relativeDays(days: number): string {
-  if (days === 0) return 'today';
+  /*
+   * A visit cannot have happened in the future, but a timestamp can say it
+   * did: a restored backup from a phone whose clock was wrong, or a clock
+   * correction landing after a stamp. `daysSinceLastVisit` floors at zero,
+   * and PlaceHistory computes its own days without doing so — clamping here
+   * covers both, and any third caller that arrives later.
+   */
+  if (days <= 0) return 'today';
   if (days === 1) return 'yesterday';
   if (days < 7) return `${days}d ago`;
   if (days < 30) return `${Math.floor(days / 7)}w ago`;
