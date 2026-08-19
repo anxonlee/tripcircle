@@ -37,7 +37,18 @@ export interface PositionedCard {
 
 export interface Cluster {
   district: District;
-  /** Top-left of the cluster's label, in board coordinates. */
+  /**
+   * Top-left of the cluster's box, in board coordinates.
+   *
+   * Separate from the label position because they are genuinely different
+   * points: the label sits one padding inside the box. Only the label is
+   * drawn today, and `width`/`height` describe the box — so a record
+   * carrying just `labelX` and `width` invites a future background view to
+   * be drawn a padding off, with nothing to say it was wrong.
+   */
+  x: number;
+  y: number;
+  /** Top-left of the cluster's label, inset from the box by the padding. */
   labelX: number;
   labelY: number;
   width: number;
@@ -115,6 +126,8 @@ export function layoutWall(cards: WallCard[]): WallLayout {
 
     clusters.push({
       district,
+      x: cursorX,
+      y: rowY,
       labelX: cursorX + CLUSTER_PAD,
       labelY: rowY + CLUSTER_PAD,
       width: size.width,
