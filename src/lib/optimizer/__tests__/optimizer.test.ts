@@ -994,3 +994,273 @@ describe('pinned times', () => {
     expect(withEmpty.homeMin).toBe(withOut.homeMin);
   });
 });
+
+describe('degenerate input', () => {
+  /**
+   * The screens prevent most of these. Links, restores and future callers do
+   * not, and the optimiser is the thing standing between a malformed day and
+   * a crash on someone's phone.
+   */
+
+  it('returns an empty day rather than throwing on no places', () => {
+    const plan = optimizeDay(baseInput({ places: [] }));
+    expect(plan.stops).toEqual([]);
+    expect(plan.returnLeg).toBeNull();
+    expect(plan.homeMin).toBe(plan.dayStartMin);
+    expect(plan.totals.travelUsd).toBe(0);
+  });
+
+  it('plans a single stop', () => {
+    const plan = optimizeDay(baseInput({ places: [makePlace('only', 0.01)] }));
+    expect(plan.stops).toHaveLength(1);
+    expect(plan.returnLeg).not.toBeNull();
+  });
+
+  it('handles a window that ends before it starts', () => {
+    // clampDayWindow prevents this from the UI, but a link carries its own
+    // window and the optimiser is handed the raw numbers.
+    const plan = optimizeDay(
+      baseInput({
+        places: [makePlace('a', 0.004)],
+        dayStartMin: 20 * 60,
+        homeByMin: 9 * 60,
+      })
+    );
+    expect(Number.isFinite(plan.homeMin)).toBe(true);
+    expect(plan.warnings.length).toBeGreaterThan(0);
+  });
+
+  it('handles two places at exactly the same point', () => {
+    const plan = optimizeDay(
+      baseInput({
+        places: [makePlace('a', 0.01), makePlace('b', 0.01)],
+      })
+    );
+    expect(plan.stops).toHaveLength(2);
+    for (const s of plan.stops) {
+      expect(Number.isFinite(s.arriveMin)).toBe(true);
+      expect(s.leg.durationMin).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it('handles a place sitting on the start place', () => {
+    const plan = optimizeDay(
+      baseInput({ places: [makePlace('here', 0)] })
+    );
+    expect(plan.stops).toHaveLength(1);
+    expect(Number.isFinite(plan.homeMin)).toBe(true);
+  });
+
+  it('handles a place open past midnight', () => {
+    // OpenHours documents close > 1440 for a bar shutting at 2am.
+    const plan = optimizeDay(
+      baseInput({
+        places: [makePlace('bar', 0.01, { openHours: { open: 20 * 60, close: 26 * 60 } })],
+        dayStartMin: 19 * 60,
+        homeByMin: 23 * 60 + 59,
+      })
+    );
+    expect(plan.stops[0].warnings.join(' ')).not.toContain('closes');
+  });
+
+  it('does not lose a stop with a zero-minute visit', () => {
+    const plan = optimizeDay(
+      baseInput({
+        places: [makePlace('a', 0.004, { visitDurationMin: 0 }), makePlace('b', 0.01)],
+      })
+    );
+    expect(plan.stops).toHaveLength(2);
+  });
+
+  it('keeps times monotonic across the day', () => {
+    // The one invariant the whole schedule rests on: you cannot arrive
+    // somewhere before you left the place before it.
+    const plan = optimizeDay(
+      baseInput({
+        places: [
+          makePlace('a', 0.004, { openHours: { open: 11 * 60, close: 20 * 60 } }),
+          makePlace('b', 0.02),
+          makePlace('c', 0.03, { openHours: { open: 9 * 60, close: 12 * 60 } }),
+        ],
+        homeByMin: 23 * 60,
+      })
+    );
+    let last = plan.dayStartMin;
+    for (const s of plan.stops) {
+      expect(s.arriveMin).toBeGreaterThanOrEqual(last);
+      expect(s.beginMin).toBeGreaterThanOrEqual(s.arriveMin);
+      expect(s.departMin).toBeGreaterThanOrEqual(s.beginMin);
+      last = s.departMin;
+    }
+    expect(plan.homeMin).toBeGreaterThanOrEqual(last);
+  });
+
+  it('numbers the stops in the order it returns them', () => {
+    const plan = optimizeDay(
+      baseInput({
+        places: [makePlace('a', 0.03), makePlace('b', 0.004), makePlace('c', 0.014)],
+        homeByMin: 23 * 60,
+      })
+    );
+    expect(plan.stops.map((s) => s.order)).toEqual([1, 2, 3]);
+  });
+
+  it('reports totals that match the stops it produced', () => {
+    const plan = optimizeDay(
+      baseInput({
+        places: [makePlace('a', 0.01), makePlace('b', 0.02), makePlace('c', 0.03)],
+        homeByMin: 23 * 60,
+      })
+    );
+    const legMinutes =
+      plan.stops.reduce((sum, s) => sum + s.leg.durationMin, 0) +
+      (plan.returnLeg?.durationMin ?? 0);
+    expect(plan.totals.travelMin).toBe(legMinutes);
+    expect(plan.totals.waitMin).toBe(
+      plan.stops.reduce((sum, s) => sum + s.waitMin, 0)
+    );
+  });
+
+  it('survives the same place appearing twice in one day', () => {
+    // Nothing in the app should produce this, and the decoder dedupes it,
+    // but a duplicate must not put the optimiser into a bad state.
+    const dup = makePlace('same', 0.01);
+    const plan = optimizeDay(baseInput({ places: [dup, dup] }));
+    expect(plan.stops).toHaveLength(2);
+    expect(Number.isFinite(plan.homeMin)).toBe(true);
+  });
+});
+
+describe('pinned times under pressure', () => {
+  const pins = (entries: Record<string, number>) => new Map(Object.entries(entries));
+
+  it('puts two pinned stops in the order their times demand', () => {
+    // Nearest-first would visit `near` then `far`. The times say otherwise.
+    const places = [
+      makePlace('near', 0.004, { visitDurationMin: 30 }),
+      makePlace('far', 0.02, { visitDurationMin: 30 }),
+    ];
+    const plan = optimizeDay(
+      baseInput({
+        places,
+        dayStartMin: 9 * 60,
+        homeByMin: 23 * 60,
+        pinnedTimes: pins({ far: 10 * 60, near: 14 * 60 }),
+      })
+    );
+    expect(plan.stops.map((s) => s.place.id)).toEqual(['far', 'near']);
+    expect(plan.stops[0].beginMin).toBe(10 * 60);
+    expect(plan.stops[1].beginMin).toBe(14 * 60);
+  });
+
+  it('reports both when two pins cannot both be met', () => {
+    // Ten minutes apart on the clock, an hour apart on the ground.
+    const places = [
+      makePlace('a', 0.004, { visitDurationMin: 30 }),
+      makePlace('b', 0.06, { visitDurationMin: 30 }),
+    ];
+    const plan = optimizeDay(
+      baseInput({
+        places,
+        dayStartMin: 9 * 60,
+        homeByMin: 23 * 60,
+        pinnedTimes: pins({ a: 10 * 60, b: 10 * 60 + 10 }),
+      })
+    );
+    expect(plan.stops).toHaveLength(2);
+    // Whichever it could not reach in time says so, by name and by amount.
+    expect(plan.warnings.join(' ')).toMatch(/min later than the 10:/);
+  });
+
+  it('ignores a pin for a place that is not in the day', () => {
+    const plan = optimizeDay(
+      baseInput({
+        places: [makePlace('a', 0.004)],
+        pinnedTimes: pins({ 'not-here': 13 * 60 }),
+      })
+    );
+    expect(plan.stops[0].pinnedMin).toBeUndefined();
+    expect(plan.warnings.join(' ')).not.toContain('later than');
+  });
+
+  it('holds a pin that falls outside the day window', () => {
+    // The window narrows after the pin was set. The pin is the user's own
+    // instruction, so it holds and the day reports running long rather than
+    // the pin being quietly moved.
+    const plan = optimizeDay(
+      baseInput({
+        places: [makePlace('a', 0.004)],
+        dayStartMin: 9 * 60,
+        homeByMin: 12 * 60,
+        pinnedTimes: pins({ a: 14 * 60 }),
+      })
+    );
+    expect(plan.stops[0].beginMin).toBe(14 * 60);
+    expect(plan.warnings.join(' ')).toContain('past your');
+  });
+
+  it('does not let a pin drag a closed door open', () => {
+    // Pinned inside the day but after the place shuts: the visit cannot
+    // happen, and the schedule must say so rather than book it anyway.
+    const plan = optimizeDay(
+      baseInput({
+        places: [
+          makePlace('shut', 0.004, { openHours: { open: 9 * 60, close: 12 * 60 } }),
+        ],
+        dayStartMin: 9 * 60,
+        homeByMin: 20 * 60,
+        pinnedTimes: pins({ shut: 15 * 60 }),
+      })
+    );
+    expect(plan.warnings.join(' ')).toContain('closes');
+  });
+
+  it('keeps the schedule monotonic around a pin', () => {
+    const plan = optimizeDay(
+      baseInput({
+        places: [
+          makePlace('a', 0.004),
+          makePlace('b', 0.01),
+          makePlace('c', 0.02),
+        ],
+        dayStartMin: 9 * 60,
+        homeByMin: 23 * 60,
+        pinnedTimes: pins({ b: 15 * 60 }),
+      })
+    );
+    let last = plan.dayStartMin;
+    for (const s of plan.stops) {
+      expect(s.arriveMin).toBeGreaterThanOrEqual(last);
+      expect(s.departMin).toBeGreaterThanOrEqual(s.beginMin);
+      last = s.departMin;
+    }
+  });
+
+  it('does not reorder a pinned day the user arranged themselves', () => {
+    const places = [makePlace('first', 0.02), makePlace('second', 0.004)];
+    const plan = optimizeDay(
+      baseInput({
+        places,
+        fixedOrder: true,
+        homeByMin: 23 * 60,
+        pinnedTimes: pins({ second: 10 * 60 }),
+      })
+    );
+    expect(plan.stops.map((s) => s.place.id)).toEqual(['first', 'second']);
+  });
+
+  it('gives the same plan twice for the same pins', () => {
+    const places = [makePlace('a', 0.03), makePlace('b', 0.004), makePlace('c', 0.014)];
+    const run = () =>
+      optimizeDay(
+        baseInput({
+          places,
+          homeByMin: 23 * 60,
+          pinnedTimes: pins({ c: 13 * 60 }),
+        })
+      );
+    expect(run().stops.map((s) => s.place.id)).toEqual(
+      run().stops.map((s) => s.place.id)
+    );
+  });
+});
