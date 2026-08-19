@@ -16,6 +16,7 @@ import type { RootStackParamList } from '../navigation';
 import type { CuratedPlace } from '../domain/types';
 import { listPlacesForHistory } from '../services/places';
 import { useDiaryStore } from '../store/useDiaryStore';
+import { useTripStore } from '../store/useTripStore';
 import { categoryLabels, colors } from '../theme/colors';
 
 const MONTHS = 'Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split(' ');
@@ -43,6 +44,20 @@ function rangeLabel(period: Period, startMs: number, endMs: number): string {
       ? `${b.getDate()}`
       : `${MONTHS[b.getMonth()]} ${b.getDate()}`;
   return `${left} – ${right}`;
+}
+
+/**
+ * "two months", not "2 months" — and never "1 months", which is what
+ * flooring the division produced at exactly 60 days, the very threshold
+ * that makes a place overdue in the first place.
+ */
+function monthsAway(daysSince: number): string {
+  const months = Math.max(2, Math.floor(daysSince / 30));
+  if (months >= 12) {
+    const years = Math.floor(months / 12);
+    return years === 1 ? 'over a year' : `over ${years} years`;
+  }
+  return `${months} months`;
 }
 
 /** Sentence case, because these read as a list rather than as controls. */
@@ -87,6 +102,8 @@ export function SummaryScreen({ embedded = false }: { embedded?: boolean } = {})
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const visits = useDiaryStore((s) => s.visits);
+  const selectedIds = useTripStore((s) => s.selectedPlaceIds);
+  const togglePlace = useTripStore((s) => s.togglePlace);
 
   /**
    * Through the service, so a week containing a place the user added counts
@@ -105,6 +122,21 @@ export function SummaryScreen({ embedded = false }: { embedded?: boolean } = {})
     () => summarize(places, visits, period),
     [places, visits, period]
   );
+
+  /**
+   * The nudge was a sentence, which is the one thing a nudge cannot be.
+   * §3A.5 has recency driving a return, and a recap that names somewhere
+   * neglected and then offers a generic "plan a day out" makes the user
+   * carry the name to Explore and find it again themselves.
+   *
+   * Adds rather than replaces: the day may already have places in it, and
+   * a recap is not the place to throw those away. If it is already there
+   * this is simply a way through to the plan.
+   */
+  const planOverdue = (placeId: string) => {
+    if (!selectedIds.includes(placeId)) togglePlace(placeId);
+    navigation.navigate('DayPlan');
+  };
 
   const onShare = () => {
     const lines = [
@@ -234,12 +266,20 @@ export function SummaryScreen({ embedded = false }: { embedded?: boolean } = {})
         )}
 
         {summary.overdue && (
-          <View style={styles.nudge}>
-            <Text style={styles.nudgeText}>
-              You liked {summary.overdue.place.name} but haven't been in{' '}
-              {Math.floor(summary.overdue.daysSince / 30)} months.
-            </Text>
-          </View>
+          <Pressable
+            style={styles.nudge}
+            onPress={() => planOverdue(summary.overdue!.place.id)}
+            accessibilityRole="button"
+            accessibilityLabel={`Plan a day around ${summary.overdue.place.name}`}
+          >
+            <View style={styles.nudgeText}>
+              <Text style={styles.nudgeBody}>
+                You liked {summary.overdue.place.name} but haven't been in{' '}
+                {monthsAway(summary.overdue.daysSince)}.
+              </Text>
+              <Text style={styles.nudgeAction}>Put it in a day →</Text>
+            </View>
+          </Pressable>
         )}
 
         {/* The forward hook every recap ends on (PRD §3A.4). */}
@@ -381,7 +421,9 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 12,
   },
-  nudgeText: { fontSize: 12, color: colors.textSecondary, lineHeight: 17 },
+  nudgeText: { gap: 5 },
+  nudgeBody: { fontSize: 12, color: colors.textSecondary, lineHeight: 17 },
+  nudgeAction: { fontSize: 12, fontWeight: '500', color: colors.accent },
   empty: { alignItems: 'center', gap: 12, paddingVertical: 48 },
   emptyText: {
     fontSize: 13,
