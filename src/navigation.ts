@@ -28,6 +28,13 @@ export type RootStackParamList = {
    * a payment rail.
    */
   CostSplit: { suggestCents?: number } | undefined;
+  /**
+   * Lists shared with other people (PRD F14, Phase 3) — the only part of
+   * the app that needs an account or a network. Everything else works with
+   * neither, and these two routes are the whole of the exception.
+   */
+  Wishlists: undefined;
+  Wishlist: { id: string };
   Privacy: undefined;
   Diary: undefined;
   EditVisit: { visitId: string };

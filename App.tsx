@@ -18,7 +18,10 @@ import { MemoriesScreen } from './src/screens/MemoriesScreen';
 import { PlacesScreen } from './src/screens/PlacesScreen';
 import { PlanScreen } from './src/screens/PlanScreen';
 import { PlanSuggestScreen } from './src/screens/PlanSuggestScreen';
+import { useAuthStore } from './src/store/useAuthStore';
 import { CostSplitScreen } from './src/screens/CostSplitScreen';
+import { WishlistScreen } from './src/screens/WishlistScreen';
+import { WishlistsScreen } from './src/screens/WishlistsScreen';
 import { PrivacyScreen } from './src/screens/PrivacyScreen';
 import { SetupScreen } from './src/screens/SetupScreen';
 import { StartDayScreen } from './src/screens/StartDayScreen';
@@ -86,6 +89,17 @@ export default function App() {
   */
   useSharedDayLink();
 
+  /*
+   * Starts the session listener once, at the root, rather than when the
+   * wishlist screen happens to open. A session that only wakes up on one
+   * screen is a session that expires unnoticed everywhere else.
+   *
+   * Does nothing at all in a build with no server configured.
+   */
+  useEffect(() => {
+    useAuthStore.getState().init();
+  }, []);
+
   if (!hydrated) {
     return (
       <View style={styles.splash}>
@@ -111,6 +125,8 @@ export default function App() {
             <Stack.Screen name="Stamp" component={StampScreen} />
             <Stack.Screen name="AddPlace" component={AddPlaceScreen} />
             <Stack.Screen name="CostSplit" component={CostSplitScreen} />
+            <Stack.Screen name="Wishlists" component={WishlistsScreen} />
+            <Stack.Screen name="Wishlist" component={WishlistScreen} />
             <Stack.Screen name="Privacy" component={PrivacyScreen} />
             <Stack.Screen name="Diary" component={DiaryScreen} />
             <Stack.Screen name="EditVisit" component={EditVisitScreen} />

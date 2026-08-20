@@ -226,6 +226,25 @@ export function SettingsScreen() {
           />
         </View>
 
+        {/*
+          Its own group, above the diary rather than inside it, because it
+          is the one thing here that leaves the phone. Putting a networked
+          feature among the local ones would blur the line the rest of this
+          screen exists to draw.
+        */}
+        <Text style={styles.groupLabel}>Planning with other people</Text>
+        <View style={styles.card}>
+          <Row
+            icon="account-multiple-outline"
+            label="Shared lists"
+            onPress={() => navigation.navigate('Wishlists')}
+          />
+        </View>
+        <Text style={styles.groupNote}>
+          A shared list is the only thing PIRT keeps on a server, and only
+          the people you invite can see it. Your diary is never uploaded.
+        </Text>
+
         <Text style={styles.groupLabel}>Your diary</Text>
         <View style={styles.card}>
           <Row
