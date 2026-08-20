@@ -30,6 +30,42 @@ export const hasBackend = Boolean(url && key);
  * no URL bar here, and leaving it on makes the client reach for `window` on
  * a platform that has none.
  */
+/**
+ * How long any one request may hang before it is abandoned.
+ *
+ * The rest of this app already does this — see `services/google/http.ts`,
+ * whose comment reads "so a hung request can't freeze a screen" — and the
+ * Supabase client arrived without it. A transient TLS failure on the
+ * simulator left the sign-in button disabled for forty seconds with no
+ * explanation, which is the exact failure that comment was written about.
+ *
+ * Longer than the eight seconds Google gets, because this runs on whatever
+ * connection someone has when they are out for the day, and a sign-in that
+ * gives up early is worse than one that waits a moment.
+ */
+const REQUEST_TIMEOUT_MS = 15_000;
+
+/**
+ * Honours the caller's own signal as well as the deadline. supabase-js
+ * passes one of its own for some requests, and dropping it would leave the
+ * library unable to cancel work it had already given up on.
+ */
+function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init?: RequestInit
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const caller = init?.signal;
+  if (caller) {
+    if (caller.aborted) controller.abort();
+    else caller.addEventListener('abort', () => controller.abort());
+  }
+  return fetch(input, { ...init, signal: controller.signal }).finally(() =>
+    clearTimeout(timer)
+  );
+}
+
 export const supabase: SupabaseClient | null = hasBackend
   ? createClient(url!, key!, {
       auth: {
@@ -38,6 +74,7 @@ export const supabase: SupabaseClient | null = hasBackend
         persistSession: true,
         detectSessionInUrl: false,
       },
+      global: { fetch: fetchWithTimeout },
     })
   : null;
 

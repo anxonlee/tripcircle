@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { parseOtpInput } from '../lib/otpInput';
+import { serverMessage } from '../lib/serverError';
 import { useAuthStore } from '../store/useAuthStore';
 import { colors } from '../theme/colors';
 
@@ -32,7 +33,7 @@ export function SignIn() {
       await sendCode(email);
       setSent(true);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'That did not work.');
+      setError(serverMessage(e));
     } finally {
       setBusy(false);
     }
@@ -44,7 +45,7 @@ export function SignIn() {
     try {
       await verifyCode(email, code);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'That code was not accepted.');
+      setError(serverMessage(e));
     } finally {
       setBusy(false);
     }

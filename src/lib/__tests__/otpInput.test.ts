@@ -48,3 +48,36 @@ describe('parseOtpInput', () => {
     }
   });
 });
+
+describe('serverMessage', () => {
+  const { serverMessage } = require('../serverError');
+
+  it('turns a dropped connection into something actionable', () => {
+    // What the simulator actually produced: a native TLS exception with a
+    // Swift file name in it. Nobody can act on that.
+    for (const raw of [
+      'fetch failed: UnexpectedException: A TLS error caused the secure connection to fail. (at ExpoModulesCore/Promise.swift:56)',
+      'Network request failed',
+      'Aborted',
+      'The request timed out',
+    ]) {
+      expect(serverMessage(new Error(raw))).toBe(
+        'Could not reach the server. Check your connection and try again.'
+      );
+    }
+  });
+
+  it('leaves a real answer from the server alone', () => {
+    // These are worth reading: they say what to change.
+    expect(serverMessage(new Error('Email address "x@invalid" is invalid'))).toBe(
+      'Email address "x@invalid" is invalid'
+    );
+    expect(serverMessage({ message: 'Token has expired or is invalid' })).toBe(
+      'Token has expired or is invalid'
+    );
+  });
+
+  it('says something rather than nothing for a shapeless failure', () => {
+    expect(serverMessage(undefined)).toBe('Something went wrong.');
+  });
+});
