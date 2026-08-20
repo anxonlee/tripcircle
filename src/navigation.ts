@@ -22,6 +22,12 @@ export type RootStackParamList = {
    * moderation obligation attached.
    */
   AddPlace: undefined;
+  /**
+   * Splitting the day's cost (PRD F16). Tracking only — §487 keeps money
+   * movement out of the app entirely, so nothing behind this route touches
+   * a payment rail.
+   */
+  CostSplit: { suggestCents?: number } | undefined;
   Privacy: undefined;
   Diary: undefined;
   EditVisit: { visitId: string };

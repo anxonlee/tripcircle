@@ -18,6 +18,7 @@ import { MemoriesScreen } from './src/screens/MemoriesScreen';
 import { PlacesScreen } from './src/screens/PlacesScreen';
 import { PlanScreen } from './src/screens/PlanScreen';
 import { PlanSuggestScreen } from './src/screens/PlanSuggestScreen';
+import { CostSplitScreen } from './src/screens/CostSplitScreen';
 import { PrivacyScreen } from './src/screens/PrivacyScreen';
 import { SetupScreen } from './src/screens/SetupScreen';
 import { StartDayScreen } from './src/screens/StartDayScreen';
@@ -109,6 +110,7 @@ export default function App() {
             <Stack.Screen name="StartDay" component={StartDayScreen} />
             <Stack.Screen name="Stamp" component={StampScreen} />
             <Stack.Screen name="AddPlace" component={AddPlaceScreen} />
+            <Stack.Screen name="CostSplit" component={CostSplitScreen} />
             <Stack.Screen name="Privacy" component={PrivacyScreen} />
             <Stack.Screen name="Diary" component={DiaryScreen} />
             <Stack.Screen name="EditVisit" component={EditVisitScreen} />

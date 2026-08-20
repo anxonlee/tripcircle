@@ -890,6 +890,31 @@ export function PlanScreen({ navigation }: Props) {
             already says what the sheet is, and the share sheet names the
             action the moment it opens.
           */}
+          {/*
+            Splitting sits beside sharing because they are the same kind of
+            act — handing the day to the people who were on it. It carries
+            the fares across so the ledger starts from what the plan already
+            worked out rather than from someone reading it off the screen.
+          */}
+          <Pressable
+            style={styles.shareBtn}
+            onPress={() =>
+              navigation.navigate('CostSplit', {
+                suggestCents: plan
+                  ? Math.round(plan.totals.totalUsd * 100)
+                  : undefined,
+              })
+            }
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Split what this day cost"
+          >
+            <MaterialCommunityIcons
+              name="account-cash-outline"
+              size={18}
+              color={colors.textSecondary}
+            />
+          </Pressable>
           <Pressable
             style={styles.shareBtn}
             onPress={shareDay}
