@@ -15,6 +15,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { CuratedPlace } from '../domain/types';
+import { serverMessage as message } from '../lib/serverError';
+import { DATASET_CITY } from '../lib/tripLink';
 import type { RootStackParamList } from '../navigation';
 import { placesService } from '../services/places';
 import {
@@ -33,7 +35,7 @@ import {
 import { useAuthStore } from '../store/useAuthStore';
 import { useTripStore } from '../store/useTripStore';
 import { colors } from '../theme/colors';
-import { message } from './WishlistsScreen';
+
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Wishlist'>;
 
@@ -57,7 +59,12 @@ export function WishlistScreen({ navigation, route }: Props) {
   const [results, setResults] = useState<CuratedPlace[]>([]);
   const [busy, setBusy] = useState(false);
 
-  const isOwner = list?.ownerId === session?.user.id;
+  /*
+   * Both sides have to exist. `list?.ownerId === session?.user.id` is true
+   * when both are undefined — a signed-out person looking at a list that
+   * has not loaded was being offered "Delete this list".
+   */
+  const isOwner = Boolean(list && session && list.ownerId === session.user.id);
 
   const refresh = useCallback(async () => {
     try {
@@ -248,6 +255,19 @@ export function WishlistScreen({ navigation, route }: Props) {
       </View>
 
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 28 }]}>
+        {/*
+          A list built against a different place dataset. Its ids mean
+          nothing here, so the places would arrive nameless or not at all —
+          said once, at the top, rather than left to be inferred from a list
+          that mostly does not work.
+        */}
+        {list && list.city !== DATASET_CITY && (
+          <Text style={styles.foreign}>
+            This list was made in another city ({list.city}), so its places
+            are not in your copy of PIRT.
+          </Text>
+        )}
+
         {members.length > 0 && (
           <Text style={styles.who}>
             {members.map((m) => m.displayName).join(' · ')}
@@ -362,6 +382,7 @@ const styles = StyleSheet.create({
   content: { padding: 16, gap: 11 },
   spinner: { marginTop: 24 },
   who: { fontSize: 12, color: colors.textMuted },
+  foreign: { fontSize: 12, color: colors.warning, lineHeight: 17 },
   body: { fontSize: 13, color: colors.textSecondary, lineHeight: 19 },
   sectionTitle: { fontSize: 12, color: colors.textSecondary },
   row: {

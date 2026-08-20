@@ -1,3 +1,4 @@
+import { DATASET_CITY } from '../lib/tripLink';
 import { requireSupabase } from './supabase';
 
 /**
@@ -52,7 +53,13 @@ export async function createWishlist(name: string, ownerId: string): Promise<Wis
     // owner_id is sent because the insert policy checks it against the
     // caller. The database decides whether it is allowed; this only states
     // the intent.
-    .insert({ name: name.trim() || 'Our list', owner_id: ownerId })
+    /*
+     * The city is stated, not left to the column default. The default is
+     * 'sf' because this build is the Bay Area one, and a Hong Kong build
+     * relying on it would create lists claiming to be full of San Francisco
+     * places. Same reason a shared day link carries its city.
+     */
+    .insert({ name: name.trim() || 'Our list', owner_id: ownerId, city: DATASET_CITY })
     .select('id, name, city, owner_id, invite_code, created_at')
     .single();
   if (error) throw error;

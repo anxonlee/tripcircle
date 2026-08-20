@@ -19,7 +19,8 @@ import {
   settleUp,
 } from '../lib/costSplit';
 import type { RootStackParamList } from '../navigation';
-import { payersFrom, useSplitStore } from '../store/useSplitStore';
+import { payersFrom } from '../lib/costSplit';
+import { useSplitStore } from '../store/useSplitStore';
 import { colors } from '../theme/colors';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CostSplit'>;

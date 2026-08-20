@@ -15,6 +15,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SignIn } from '../components/SignIn';
 import type { RootStackParamList } from '../navigation';
+import { serverMessage as message } from '../lib/serverError';
 import { hasBackend } from '../services/supabase';
 import {
   createWishlist,
@@ -26,6 +27,9 @@ import { useAuthStore } from '../store/useAuthStore';
 import { colors } from '../theme/colors';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Wishlists'>;
+
+/** Set by `new_invite_code()` in the database. Ten characters, always. */
+const INVITE_CODE_LENGTH = 10;
 
 /**
  * Lists you share with other people (PRD F14, Phase 3).
@@ -199,8 +203,11 @@ export function WishlistsScreen({ navigation }: Props) {
                 editable={!busy}
               />
               <Pressable
-                style={[styles.addBtn, (code.trim().length < 6 || busy) && styles.addBtnOff]}
-                disabled={code.trim().length < 6 || busy}
+                style={[
+                  styles.addBtn,
+                  (code.trim().length !== INVITE_CODE_LENGTH || busy) && styles.addBtnOff,
+                ]}
+                disabled={code.trim().length !== INVITE_CODE_LENGTH || busy}
                 onPress={join}
                 accessibilityRole="button"
                 accessibilityLabel="Join this list"
@@ -213,15 +220,6 @@ export function WishlistsScreen({ navigation }: Props) {
       </ScrollView>
     </View>
   );
-}
-
-/** Server errors arrive shaped differently depending on where they came from. */
-export function message(e: unknown): string {
-  if (e instanceof Error) return e.message;
-  if (e && typeof e === 'object' && 'message' in e) {
-    return String((e as { message: unknown }).message);
-  }
-  return 'Something went wrong.';
 }
 
 const styles = StyleSheet.create({

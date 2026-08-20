@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
+import type { SplitExpense, SplitPerson } from '../lib/costSplit';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import type { Payer } from '../lib/costSplit';
 
 /**
  * Splitting the cost of the day (PRD F16, §3.7).
@@ -18,19 +18,7 @@ import type { Payer } from '../lib/costSplit';
  * is shared at all.
  */
 
-export interface SplitPerson {
-  id: string;
-  name: string;
-}
-
-export interface SplitExpense {
-  id: string;
-  /** What it was for. Free text, and blank is allowed. */
-  label: string;
-  cents: number;
-  /** Which person paid. */
-  payerId: string;
-}
+export type { SplitExpense, SplitPerson } from '../lib/costSplit';
 
 interface SplitState {
   people: SplitPerson[];
@@ -96,17 +84,3 @@ export const useSplitStore = create<SplitState>()(
     }
   )
 );
-
-/** What each person put in, ready for `settleUp`. */
-export function payersFrom(
-  people: SplitPerson[],
-  expenses: SplitExpense[]
-): Payer[] {
-  return people.map((p) => ({
-    id: p.id,
-    name: p.name,
-    paidCents: expenses
-      .filter((e) => e.payerId === p.id)
-      .reduce((sum, e) => sum + e.cents, 0),
-  }));
-}

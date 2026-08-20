@@ -18,6 +18,20 @@
  * spotted by whoever is out of pocket.
  */
 
+/** A person on a split, as the store holds them. */
+export interface SplitPerson {
+  id: string;
+  name: string;
+}
+
+/** Something one of them paid for. */
+export interface SplitExpense {
+  id: string;
+  label: string;
+  cents: number;
+  payerId: string;
+}
+
 export interface Payer {
   id: string;
   name: string;
@@ -152,4 +166,31 @@ export function parseAmount(text: string): number | null {
   // Via a string rather than value * 100: 19.99 * 100 is 1998.9999999999998,
   // and a cent lost here is a cent that never reconciles.
   return Math.round(value * 100);
+}
+
+/**
+ * What each person put in, ready for `settleUp`.
+ *
+ * Lives here rather than beside the store because the store imports
+ * AsyncStorage, which cannot be loaded in this test setup — and a join
+ * between what people typed and the arithmetic that divides their money is
+ * exactly the code that should be testable.
+ *
+ * Driven by the people, not the expenses: someone who paid for nothing is
+ * still on the split and still owes a share, and building this from the
+ * expense list would quietly divide the day between the wrong number of
+ * people. It also means an expense whose payer has gone contributes nothing,
+ * so a total can never include money nobody put in.
+ */
+export function payersFrom(
+  people: SplitPerson[],
+  expenses: SplitExpense[]
+): Payer[] {
+  return people.map((p) => ({
+    id: p.id,
+    name: p.name,
+    paidCents: expenses
+      .filter((e) => e.payerId === p.id)
+      .reduce((sum, e) => sum + e.cents, 0),
+  }));
 }
