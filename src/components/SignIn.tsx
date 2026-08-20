@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { parseOtpInput } from '../lib/otpInput';
 import { useAuthStore } from '../store/useAuthStore';
 import { colors } from '../theme/colors';
 
@@ -73,9 +74,15 @@ export function SignIn() {
 
       {sent && (
         <>
+          {/*
+            Both shapes are named because either can arrive: the server
+            sends a code or a link depending on a template this app does
+            not control, and a screen that only mentioned one would look
+            broken to whoever got the other.
+          */}
           <Text style={styles.sentNote}>
-            A six-digit code is on its way to {email.trim()}. It expires
-            shortly.
+            Check {email.trim()}. Enter the six-digit code, or paste the
+            sign-in link if that is what you were sent.
           </Text>
           <TextInput
             style={styles.input}
@@ -83,7 +90,10 @@ export function SignIn() {
             placeholderTextColor={colors.textMuted}
             value={code}
             onChangeText={setCode}
-            keyboardType="number-pad"
+            // Not the number pad: a link has to be pasteable here too.
+            keyboardType="default"
+            autoCapitalize="none"
+            autoCorrect={false}
             textContentType="oneTimeCode"
             editable={!busy}
           />
@@ -94,7 +104,9 @@ export function SignIn() {
 
       <Pressable
         style={[styles.primary, busy && styles.primaryOff]}
-        disabled={busy || (sent ? code.trim().length < 6 : !email.includes('@'))}
+        disabled={
+          busy || (sent ? parseOtpInput(code) === null : !email.includes('@'))
+        }
         onPress={sent ? verify : send}
       >
         <Text style={styles.primaryText}>

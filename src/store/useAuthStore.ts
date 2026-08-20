@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { Session } from '@supabase/supabase-js';
+import { parseOtpInput } from '../lib/otpInput';
 import { hasBackend, supabase } from '../services/supabase';
 
 /**
@@ -71,13 +72,34 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     if (error) throw error;
   },
 
+  /**
+   * Takes the code, or the whole link if that is what arrived.
+   *
+   * Which one lands in the inbox is a project setting, not something this
+   * app chooses, so it accepts either rather than breaking when a template
+   * changes underneath it.
+   */
   verifyCode: async (email, code) => {
     if (!supabase) throw new Error('This build has no server configured.');
-    const { error } = await supabase.auth.verifyOtp({
-      email: email.trim(),
-      token: code.trim(),
-      type: 'email',
-    });
+    const input = parseOtpInput(code);
+    if (!input) {
+      throw new Error(
+        'That is not a code. Enter the six digits from the email, or paste the whole sign-in link.'
+      );
+    }
+    const { error } =
+      input.kind === 'code'
+        ? await supabase.auth.verifyOtp({
+            email: email.trim(),
+            token: input.token,
+            type: 'email',
+          })
+        : // A hash identifies the request on its own, so no email is sent
+          // with it — passing one alongside is rejected as ambiguous.
+          await supabase.auth.verifyOtp({
+            token_hash: input.tokenHash,
+            type: 'email',
+          });
     if (error) throw error;
   },
 
