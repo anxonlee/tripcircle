@@ -16,7 +16,24 @@ import { colors } from '../theme/colors';
  * The copy leads with what an account is for. Nobody wants an account; they
  * want the list, and the screen should say which one it is asking about.
  */
-export function SignIn() {
+/**
+ * Why this screen is asking. Reused by three screens, and a gate that
+ * explains the wrong feature is worse than one that explains nothing: the
+ * feed told people an account was needed "so the other person can see your
+ * list", which is true of a different screen.
+ */
+const REASONS = {
+  wishlist:
+    'A shared list needs an account so the other person can see it.',
+  feed: 'Reading and publishing days needs an account, so there is a name against what people write.',
+  publish: 'Publishing a day needs an account, so there is a name against it.',
+} as const;
+
+export function SignIn({
+  reason = 'wishlist',
+}: {
+  reason?: keyof typeof REASONS;
+} = {}) {
   const sendCode = useAuthStore((s) => s.sendCode);
   const verifyCode = useAuthStore((s) => s.verifyCode);
 
@@ -53,11 +70,12 @@ export function SignIn() {
 
   return (
     <View style={styles.wrap}>
-      <Text style={styles.title}>Plan with someone else</Text>
+      <Text style={styles.title}>
+        {reason === 'wishlist' ? 'Plan with someone else' : 'Sign in'}
+      </Text>
       <Text style={styles.body}>
-        A shared list needs an account so the other person can see it. Your
-        diary stays on this phone either way — it is never uploaded, with or
-        without an account.
+        {REASONS[reason]} Your diary stays on this phone either way — it is
+        never uploaded, with or without an account.
       </Text>
 
       <TextInput

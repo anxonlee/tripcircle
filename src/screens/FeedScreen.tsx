@@ -84,7 +84,7 @@ export function FeedScreen({ navigation }: Props) {
         <ActivityIndicator color={colors.textMuted} style={styles.spinner} />
       ) : status === 'signedOut' ? (
         <ScrollView contentContainerStyle={styles.content}>
-          <SignIn />
+          <SignIn reason="feed" />
         </ScrollView>
       ) : (
         <>

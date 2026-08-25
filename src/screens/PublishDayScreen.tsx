@@ -104,7 +104,7 @@ export function PublishDayScreen({ navigation }: Props) {
             This build has no server configured, so publishing is off.
           </Text>
         ) : status !== 'signedIn' ? (
-          <SignIn />
+          <SignIn reason="publish" />
         ) : places.length === 0 ? (
           <Text style={styles.body}>
             There is no day to publish. Choose some places first.
