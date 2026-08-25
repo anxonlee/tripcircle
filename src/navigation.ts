@@ -35,6 +35,15 @@ export type RootStackParamList = {
    */
   Wishlists: undefined;
   Wishlist: { id: string };
+  /**
+   * Days other people published, and one of them (PRD §3.8). Public content,
+   * so both screens carry the reporting and blocking that §384 and App Store
+   * guideline 1.2 require of anything user-generated.
+   */
+  Feed: undefined;
+  Post: { id: string };
+  /** Publishing the day currently on the Plan screen. */
+  PublishDay: undefined;
   Privacy: undefined;
   Diary: undefined;
   EditVisit: { visitId: string };

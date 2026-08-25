@@ -20,6 +20,9 @@ import { PlanScreen } from './src/screens/PlanScreen';
 import { PlanSuggestScreen } from './src/screens/PlanSuggestScreen';
 import { useAuthStore } from './src/store/useAuthStore';
 import { CostSplitScreen } from './src/screens/CostSplitScreen';
+import { FeedScreen } from './src/screens/FeedScreen';
+import { PostScreen } from './src/screens/PostScreen';
+import { PublishDayScreen } from './src/screens/PublishDayScreen';
 import { WishlistScreen } from './src/screens/WishlistScreen';
 import { WishlistsScreen } from './src/screens/WishlistsScreen';
 import { PrivacyScreen } from './src/screens/PrivacyScreen';
@@ -127,6 +130,9 @@ export default function App() {
             <Stack.Screen name="CostSplit" component={CostSplitScreen} />
             <Stack.Screen name="Wishlists" component={WishlistsScreen} />
             <Stack.Screen name="Wishlist" component={WishlistScreen} />
+            <Stack.Screen name="Feed" component={FeedScreen} />
+            <Stack.Screen name="Post" component={PostScreen} />
+            <Stack.Screen name="PublishDay" component={PublishDayScreen} />
             <Stack.Screen name="Privacy" component={PrivacyScreen} />
             <Stack.Screen name="Diary" component={DiaryScreen} />
             <Stack.Screen name="EditVisit" component={EditVisitScreen} />

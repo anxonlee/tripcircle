@@ -239,10 +239,17 @@ export function SettingsScreen() {
             label="Shared lists"
             onPress={() => navigation.navigate('Wishlists')}
           />
+          <Row
+            icon="earth"
+            label="Days out"
+            onPress={() => navigation.navigate('Feed')}
+            divided
+          />
         </View>
         <Text style={styles.groupNote}>
-          A shared list is the only thing PIRT keeps on a server, and only
-          the people you invite can see it. Your diary is never uploaded.
+          A shared list is private to the people you invite. A day you
+          publish is public to anyone signed in. Neither carries your start
+          place, and your diary is never uploaded.
         </Text>
 
         <Text style={styles.groupLabel}>Your diary</Text>

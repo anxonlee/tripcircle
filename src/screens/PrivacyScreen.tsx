@@ -109,10 +109,25 @@ const POINTS: Point[] = [
   {
     icon: 'cellphone-lock',
     title: 'Your diary stays on this phone',
-    body: 'Visits, notes, ratings, and photos are stored on your device. There is no account and no server of ours, so nobody else can read them.',
+    body: 'Visits, notes, ratings, and photos are stored on your device and are never uploaded. There is now a server, for shared lists and published days, and none of it touches the diary — there is nowhere on it for a visit to go.',
   },
   {
-    icon: 'crosshairs-gps',
+    icon: 'account-multiple-outline',
+    title: 'An account is only for planning with other people',
+    body: 'Signing in is optional and only unlocks two things: a list you share with people you invite, and publishing a day for anyone signed in to read. We keep your email address to sign you in, and a display name you choose. Nothing else about you is on the server.',
+  },
+  {
+    icon: 'earth',
+    title: 'A published day carries less than you would expect',
+    body: 'It carries the places, in order, the hours you planned for, and your display name. It does not carry your start place — there is no field for one, so it cannot — nor any address, nor anything from your diary. Anyone signed in can read it, plan it themselves, or comment on it, and you can delete it at any time.',
+  },
+  {
+    icon: 'flag-outline',
+    title: 'Reporting and blocking',
+    body: 'Every published day and comment can be reported, and anyone can be blocked. Blocking is silent and works both ways: you stop seeing them and they stop seeing you. Something reported by enough separate people is hidden automatically until we look at it. Reports are never shown to the person reported.',
+  },
+  {
+    icon: 'map-marker-outline',
     title: 'Location is read only when you ask for it',
     body: 'Two things read it: stamping a visit, and setting your starting point from where you are. Each takes a single reading, rounds it to about 100 metres, and uses it there and then. A stamp never saves it. A starting point set this way lasts until you close the app and is never written to storage. There is no background tracking.',
   },

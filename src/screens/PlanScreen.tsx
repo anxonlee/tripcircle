@@ -917,6 +917,19 @@ export function PlanScreen({ navigation }: Props) {
           </Pressable>
           <Pressable
             style={styles.shareBtn}
+            onPress={() => navigation.navigate('PublishDay')}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Publish this day for other people to see"
+          >
+            <MaterialCommunityIcons
+              name="earth"
+              size={18}
+              color={colors.textSecondary}
+            />
+          </Pressable>
+          <Pressable
+            style={styles.shareBtn}
             onPress={shareDay}
             hitSlop={8}
             accessibilityRole="button"
