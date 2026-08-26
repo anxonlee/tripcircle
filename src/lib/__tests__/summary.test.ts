@@ -146,6 +146,37 @@ describe('summarize', () => {
     expect(s.goAgain.map((p) => p.id)).toEqual(['c']);
   });
 
+  it('takes the latest answer, so a later no removes a place', () => {
+    const visits = [
+      visit('a', at(2026, 8, 18, 10), { wouldGoAgain: 'yes' }),
+      visit('a', at(2026, 8, 18, 20), { wouldGoAgain: 'no' }),
+    ];
+    expect(summarize(PLACES, visits, 'week', now).goAgain).toEqual([]);
+  });
+
+  it('takes the latest answer whichever order the log is in', () => {
+    // The log is not promised to be sorted, and reading it as though it were
+    // would make the answer depend on how the visits happened to be stored.
+    const visits = [
+      visit('a', at(2026, 8, 18, 20), { wouldGoAgain: 'yes' }),
+      visit('a', at(2026, 8, 18, 10), { wouldGoAgain: 'no' }),
+    ];
+    expect(summarize(PLACES, visits, 'week', now).goAgain.map((p) => p.id)).toEqual([
+      'a',
+    ]);
+  });
+
+  it('judges a later no only against answers inside the period', () => {
+    // The no is last overall, but it is not in this week — so the week still
+    // reports what was said in it.
+    const visits = [
+      visit('a', at(2026, 8, 18), { wouldGoAgain: 'yes' }),
+      visit('a', at(2026, 8, 29), { wouldGoAgain: 'no' }),
+    ];
+    const week = summarize(PLACES, visits, 'week', now);
+    expect(week.goAgain.map((p) => p.id)).toEqual(['a']);
+  });
+
   it('counts photos, not visits with photos twice', () => {
     const visits = [
       visit('a', at(2026, 8, 18), { photoUri: 'file://1' }),

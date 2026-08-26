@@ -121,7 +121,21 @@ export function summarize(
   const placeIds = new Set(inPeriod.map((v) => v.placeId));
   const districts = new Set<District>();
   const themeCounts = new Map<Category, number>();
-  const goAgainIds = new Set<string>();
+  /**
+   * The latest answer per place, not every answer.
+   *
+   * This used to add a place on any 'yes' in the period, which meant a
+   * later 'no' could not take it off again: stamp somewhere in the morning,
+   * go back in the evening and say you would not return, and the month still
+   * reported it under "Would go again". A recap that contradicts the last
+   * thing you told it is not reporting, it is arguing.
+   *
+   * Ties go to whichever visit comes later in the log, which is arbitrary
+   * and has to be: two answers stamped in the same millisecond have no
+   * order to respect.
+   */
+  const lastAnswer = new Map<string, Visit['wouldGoAgain']>();
+  const lastAnswerAt = new Map<string, number>();
   const companionCounts = new Map<NonNullable<ContextTags['companion']>, number>();
   let photoCount = 0;
 
@@ -139,7 +153,11 @@ export function summarize(
       themeCounts.set(theme, (themeCounts.get(theme) ?? 0) + 1);
     }
     if (v.photoUri) photoCount += 1;
-    if (v.wouldGoAgain === 'yes') goAgainIds.add(v.placeId);
+    const answeredAt = lastAnswerAt.get(v.placeId);
+    if (answeredAt === undefined || v.timestamp >= answeredAt) {
+      lastAnswerAt.set(v.placeId, v.timestamp);
+      lastAnswer.set(v.placeId, v.wouldGoAgain);
+    }
   }
 
   // "New" means first ever stamped inside the window, judged against the
@@ -171,7 +189,10 @@ export function summarize(
     companions: [...companionCounts.entries()]
       .map(([companion, count]) => ({ companion, count }))
       .sort((a, b) => b.count - a.count || a.companion.localeCompare(b.companion)),
-    goAgain: [...goAgainIds].map((id) => byId.get(id)).filter((p): p is CuratedPlace => !!p),
+    goAgain: [...lastAnswer.entries()]
+      .filter(([, answer]) => answer === 'yes')
+      .map(([id]) => byId.get(id))
+      .filter((p): p is CuratedPlace => !!p),
     overdue: findOverdue(places, visits, now),
   };
 }
