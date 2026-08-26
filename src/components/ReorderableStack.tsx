@@ -12,6 +12,7 @@ import Animated, {
   withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
+import { offsetOf, slotAt } from '../lib/reorder';
 import { colors, pressedWell } from '../theme/colors';
 
 /**
@@ -45,41 +46,6 @@ import { colors, pressedWell } from '../theme/colors';
  * same commit as the layout it describes — the two can never disagree by a
  * frame, which is how the old version earned its jump on release.
  */
-
-/** Top of slot `index`, in list space. */
-function offsetOf(
-  ids: string[],
-  heights: Record<string, number>,
-  index: number
-): number {
-  'worklet';
-  let y = 0;
-  for (let i = 0; i < index; i++) y += heights[ids[i]] ?? 0;
-  return y;
-}
-
-/**
- * Which slot a row dropped at `centre` belongs in.
- *
- * Measured against the other rows' own middles rather than a fixed step,
- * which is what lets rows of different heights sit in one list: a tall stop
- * carrying two warnings has to be passed further than a bare one before it
- * gives up its place, and that is exactly what the eye expects.
- */
-function slotAt(
-  rest: string[],
-  heights: Record<string, number>,
-  centre: number
-): number {
-  'worklet';
-  let acc = 0;
-  for (let i = 0; i < rest.length; i++) {
-    const h = heights[rest[i]] ?? 0;
-    if (centre < acc + h / 2) return i;
-    acc += h;
-  }
-  return rest.length;
-}
 
 export function ReorderableStack({
   ids,
@@ -260,10 +226,12 @@ function Item({
      */
     .onUpdate((e) => {
       activeShift.value = e.translationY;
-      const centre =
-        activeTop.value + e.translationY + (heights.value[id] ?? 0) / 2;
+      // The row's top edge, which is what `slotAt` measures against: the
+      // slots are the places a row could be put back, and a row put back
+      // starts at one of them.
+      const top = activeTop.value + e.translationY;
       const rest = liveIds.value.filter((x) => x !== id);
-      const target = slotAt(rest, heights.value, centre);
+      const target = slotAt(rest, heights.value, top);
       if (liveIds.value.indexOf(id) !== target) {
         const next = rest.slice();
         next.splice(target, 0, id);
