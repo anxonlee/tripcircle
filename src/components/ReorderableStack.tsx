@@ -1,16 +1,13 @@
-import React, { useEffect, useLayoutEffect } from 'react';
+import React, { useLayoutEffect } from 'react';
 import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { Gesture, type PanGesture } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
-  cancelAnimation,
   interpolateColor,
   runOnJS,
   useAnimatedReaction,
   useAnimatedStyle,
   useSharedValue,
-  withRepeat,
-  withSequence,
   withSpring,
   withTiming,
   type SharedValue,
@@ -20,17 +17,18 @@ import { colors, pressedWell } from '../theme/colors';
 /**
  * Reordering a list without moving it (PRD F6, §3.4).
  *
- * Modelled on rearranging apps on iOS, and this time on what iOS actually
- * does. Entering jiggle mode there changes no layout at all: the icons stay
- * in their grid, at their size, on their page. The wobble and the remove
- * badge are drawn *over* what is already on screen. Nothing is substituted.
+ * Modelled on a music queue: every row wears a grip, all the time, and a
+ * finger on that grip moves the row at once. There is no mode to enter, so
+ * there is nothing to announce and nothing to leave — which is why the rows
+ * do not wobble. A wobble is a mode telling you it is on; a list that shakes
+ * with no mode behind it is just a list that shakes.
  *
  * An earlier version swapped the plan's timeline for a tidy list of uniform
  * rows, because uniform rows make the drag arithmetic trivial — the target
  * slot is the drag distance over one number. It was the wrong trade. The
- * timeline collapsed upward as the mode opened, by 7pt at the first stop and
- * more at every stop after it, and a day that rearranges itself the moment
- * you ask to rearrange it has already lost the thread.
+ * timeline collapsed upward, by 7pt at the first stop and more at every stop
+ * after it, and a day that rearranges itself the moment you ask to rearrange
+ * it has already lost the thread.
  *
  * So this takes whatever rows it is given, at whatever heights they happen to
  * be, and moves nothing until a finger does. Every position is derived, never
@@ -42,13 +40,11 @@ import { colors, pressedWell } from '../theme/colors';
  * - a row's offset is the difference between the two.
  *
  * At rest the orders match and every offset is zero, which is the whole
- * point: opening the mode cannot move anything, because there is nothing to
- * move it by. And `committedIds` is set in a layout effect, so it changes in
- * the same commit as the layout it describes — the two can never disagree by
- * a frame, which is how the old version earned its jump on release.
+ * point: the list can carry grips permanently without ever being displaced by
+ * them. And `committedIds` is set in a layout effect, so it changes in the
+ * same commit as the layout it describes — the two can never disagree by a
+ * frame, which is how the old version earned its jump on release.
  */
-
-const JIGGLE_DEG = 0.6;
 
 /** Top of slot `index`, in list space. */
 function offsetOf(
@@ -88,18 +84,39 @@ function slotAt(
 export function ReorderableStack({
   ids,
   onReorder,
+  onPickUp,
   scrollRef,
+  pagerRef,
   renderItem,
 }: {
   /** The committed order. Rendering follows it exactly. */
   ids: string[];
   onReorder: (ids: string[]) => void;
   /**
+   * Called the moment a row is picked up.
+   *
+   * The grips are silent by design — no wobble, no mode, nothing on screen
+   * that says a drag is available. A tap on lift is what confirms the grip
+   * was hit, and without it a finger that misses by a few points and a finger
+   * that landed look identical until the row does or does not follow.
+   */
+  onPickUp?: () => void;
+  /**
    * The scrollable this sits inside. The handles' drag is declared to block
    * it, or a vertical pan starting on a handle is taken as a scroll and the
    * row never moves.
    */
   scrollRef: React.RefObject<any>;
+  /**
+   * The horizontal pager the list is a page of, if it is inside one.
+   *
+   * The grips are permanent now, so a drag no longer happens with the pager
+   * stood down — the two share the screen and can be handed the same finger.
+   * Blocking it settles which one gets it once the drag has started; the
+   * `activeOffsetY` below settles the sideways case, where the finger lands
+   * on a grip but means to turn the page.
+   */
+  pagerRef?: React.RefObject<any>;
   /**
    * The row. It is handed the drag so the grip can be placed inside its own
    * layout rather than floated over it — floated, the grip landed on the
@@ -129,11 +146,10 @@ export function ReorderableStack({
 
   return (
     <View>
-      {ids.map((id, i) => (
+      {ids.map((id) => (
         <Item
           key={id}
           id={id}
-          index={i}
           liveIds={liveIds}
           committedIds={committedIds}
           heights={heights}
@@ -141,7 +157,9 @@ export function ReorderableStack({
           activeTop={activeTop}
           activeShift={activeShift}
           scrollRef={scrollRef}
+          pagerRef={pagerRef}
           onCommit={onReorder}
+          onPickUp={onPickUp}
         >
           {renderItem}
         </Item>
@@ -152,7 +170,6 @@ export function ReorderableStack({
 
 function Item({
   id,
-  index,
   liveIds,
   committedIds,
   heights,
@@ -160,11 +177,12 @@ function Item({
   activeTop,
   activeShift,
   scrollRef,
+  pagerRef,
   onCommit,
+  onPickUp,
   children,
 }: {
   id: string;
-  index: number;
   liveIds: SharedValue<string[]>;
   committedIds: SharedValue<string[]>;
   heights: SharedValue<Record<string, number>>;
@@ -172,10 +190,11 @@ function Item({
   activeTop: SharedValue<number>;
   activeShift: SharedValue<number>;
   scrollRef: React.RefObject<any>;
+  pagerRef?: React.RefObject<any>;
   onCommit: (ids: string[]) => void;
+  onPickUp?: () => void;
   children: (id: string, drag: PanGesture) => React.ReactNode;
 }) {
-  const tilt = useSharedValue(0);
   /**
    * Whether a finger is on this row's grip. Raised on `onBegin` rather than
    * `onStart`, so the row answers the touch itself rather than waiting for
@@ -183,25 +202,6 @@ function Item({
    * between a grip that responds and one that seems not to have been hit.
    */
   const held = useSharedValue(0);
-
-  /**
-   * The wobble. Offset by position so the list does not pulse in unison,
-   * which reads as one animation rather than a set of loose things.
-   */
-  useEffect(() => {
-    tilt.value = withSequence(
-      withTiming(0, { duration: (index % 4) * 45 }),
-      withRepeat(
-        withSequence(
-          withTiming(JIGGLE_DEG, { duration: 120, easing: Easing.linear }),
-          withTiming(-JIGGLE_DEG, { duration: 120, easing: Easing.linear })
-        ),
-        -1,
-        true
-      )
-    );
-    return () => cancelAnimation(tilt);
-  }, [index, tilt]);
 
   /**
    * Record this row's height for the drag arithmetic.
@@ -222,18 +222,29 @@ function Item({
   };
 
   const drag = Gesture.Pan()
-    .blocksExternalGesture(scrollRef)
+    .blocksExternalGesture(...([scrollRef, pagerRef].filter(Boolean) as React.RefObject<any>[]))
+    /*
+     * Vertical intent before this takes the finger. A grip sitting on a page
+     * of a horizontal pager is a grip people will swipe across, and a drag
+     * that claimed those would make the objectives unreachable from any row.
+     * Six points is under a deliberate pull and over a thumb's wobble.
+     */
+    .activeOffsetY([-6, 6])
     .onBegin(() => {
       held.value = withTiming(1, { duration: 90 });
     })
     .onFinalize(() => {
       held.value = withTiming(0, { duration: 160 });
     })
-    // The grip borrows a 22pt box from the control it stands in for, which is
-    // a target you would have to aim at. The gesture answers to a thumb's
-    // worth of room around it.
-    .hitSlop({ left: 22, right: 12, top: 16, bottom: 16 })
+    /*
+     * A thumb's worth of room around the grip, but not to the left: the row's
+     * own controls stand there now that the grip no longer takes their box,
+     * and slop reaching over them would swallow taps meant for directions.
+     * Outwards, towards the screen edge, there is nothing to take from.
+     */
+    .hitSlop({ left: 2, right: 16, top: 14, bottom: 14 })
     .onStart(() => {
+      if (onPickUp) runOnJS(onPickUp)();
       activeId.value = id;
       activeTop.value = offsetOf(
         liveIds.value,
@@ -336,8 +347,6 @@ function Item({
       transform: [
         // The dragged row follows the finger exactly. Anything else is lag.
         { translateY: live - natural },
-        // The held row holds still; the rest keep wobbling around it.
-        { rotate: isActive ? '0deg' : `${tilt.value}deg` },
         { scale: withTiming(isActive ? 1.02 : 1, { duration: 130 }) },
       ],
       zIndex: isActive ? 20 : 1,
