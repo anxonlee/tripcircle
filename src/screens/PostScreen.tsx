@@ -57,7 +57,15 @@ export function PostScreen({ navigation, route }: Props) {
   const session = useAuthStore((s) => s.session);
   const setSelection = useTripStore((s) => s.setSelection);
 
-  const [post, setPost] = useState<FeedPost | null>(null);
+  /**
+   * `undefined` while looking, `null` once we know it is not there.
+   *
+   * They were the same value, so a post that had been deleted, hidden or
+   * blocked showed a spinner for ever. Restoring the last screen makes that
+   * the likely case rather than a rare one: the app can now open directly
+   * onto a post that stopped existing while it was closed.
+   */
+  const [post, setPost] = useState<FeedPost | null | undefined>(undefined);
   const [comments, setComments] = useState<FeedComment[] | null>(null);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
@@ -220,8 +228,13 @@ export function PostScreen({ navigation, route }: Props) {
       </View>
 
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 28 }]}>
-        {post === null ? (
+        {post === undefined ? (
           <ActivityIndicator color={colors.textMuted} style={styles.spinner} />
+        ) : post === null ? (
+          <Text style={styles.gone}>
+            This day is no longer here. It may have been deleted by whoever
+            wrote it, or hidden while it is reviewed.
+          </Text>
         ) : (
           <>
             <Text style={styles.meta}>
@@ -351,6 +364,7 @@ const styles = StyleSheet.create({
   content: { padding: 16, gap: 10 },
   spinner: { marginTop: 28 },
   meta: { fontSize: 12, color: colors.textMuted },
+  gone: { fontSize: 13, color: colors.textSecondary, lineHeight: 19 },
   hidden: { fontSize: 12, color: colors.warning, lineHeight: 17 },
   note: { fontSize: 13, color: colors.textSecondary, lineHeight: 19 },
   stop: { flexDirection: 'row', alignItems: 'center', gap: 10 },

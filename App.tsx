@@ -18,6 +18,8 @@ import { MemoriesScreen } from './src/screens/MemoriesScreen';
 import { PlacesScreen } from './src/screens/PlacesScreen';
 import { PlanScreen } from './src/screens/PlanScreen';
 import { PlanSuggestScreen } from './src/screens/PlanSuggestScreen';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { restorableState, type SavedNav } from './src/lib/navState';
 import { useAuthStore } from './src/store/useAuthStore';
 import { CostSplitScreen } from './src/screens/CostSplitScreen';
 import { FeedScreen } from './src/screens/FeedScreen';
@@ -81,9 +83,40 @@ function useHydrated(): boolean {
   return hydrated;
 }
 
+/**
+ * Where the last screen was, so a hand-off to Google Maps does not cost the
+ * user their place.
+ *
+ * Kept beside the diary in AsyncStorage rather than in the trip store: it
+ * describes the app's chrome, not the user's day, and it should never end up
+ * in a diary backup.
+ */
+const NAV_STATE_KEY = 'pirt-nav-state';
+
 export default function App() {
   const hydrated = useHydrated();
   const hasStartPlace = useTripStore((s) => s.startPlace !== null);
+
+  /**
+   * Read once, at launch. `undefined` means "still looking", `null` means
+   * "nothing worth restoring" — the two must not be confused, or the
+   * navigator mounts before the answer arrives and lands on the default.
+   */
+  const [savedNav, setSavedNav] = useState<SavedNav | null | undefined>(undefined);
+  useEffect(() => {
+    let alive = true;
+    void AsyncStorage.getItem(NAV_STATE_KEY)
+      .then((raw) => {
+        if (!alive) return;
+        setSavedNav(raw ? (JSON.parse(raw) as SavedNav) : null);
+      })
+      // A position that cannot be read is not worth a failed launch. The
+      // app opens where it always did.
+      .catch(() => alive && setSavedNav(null));
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   /*
     Above the splash return, because hooks cannot be conditional and because
@@ -103,7 +136,7 @@ export default function App() {
     useAuthStore.getState().init();
   }, []);
 
-  if (!hydrated) {
+  if (!hydrated || savedNav === undefined) {
     return (
       <View style={styles.splash}>
         <Text style={styles.splashBrand}>PIRT</Text>
@@ -116,7 +149,26 @@ export default function App() {
       <ErrorBoundary>
         <SafeAreaProvider>
         <StatusBar style="dark" />
-        <NavigationContainer>
+        <NavigationContainer
+          /*
+           * Only ever a state that passed `restorableState`, which refuses
+           * anything stale, anything malformed, and anything at all when
+           * there is no anchor — that last one matters, because a restored
+           * state overrides initialRouteName, and overriding it without an
+           * anchor would drop somebody onto a plan that cannot be computed.
+           */
+          initialState={
+            restorableState(savedNav, Date.now(), { hasStartPlace }) ?? undefined
+          }
+          onStateChange={(state) => {
+            void AsyncStorage.setItem(
+              NAV_STATE_KEY,
+              JSON.stringify({ at: Date.now(), state } satisfies SavedNav)
+            ).catch(() => {
+              // Losing the bookmark costs a tap. It is not worth an error.
+            });
+          }}
+        >
           <Stack.Navigator
             initialRouteName={hasStartPlace ? 'Tabs' : 'Setup'}
             screenOptions={{ headerShown: false }}
