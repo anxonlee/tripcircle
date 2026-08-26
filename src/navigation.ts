@@ -1,11 +1,25 @@
+import type { NavigatorScreenParams } from '@react-navigation/native';
+
 export type RootStackParamList = {
-  Tabs: undefined;
+  /**
+   * Typed with its inner screens so anything can send the user to a
+   * particular tab. The Plan tab is now where a plan lives, so screens that
+   * hand a day over need to be able to name it.
+   */
+  Tabs: NavigatorScreenParams<TabParamList> | undefined;
   Setup: undefined;
   /**
    * The generated day plan. Named DayPlan, not Plan: the tab navigator
    * already owns a route called Plan (the suggestion screen), and
    * navigate('Plan') resolves against the nearer navigator, so a stack route
    * of the same name could never be reached.
+   */
+  /**
+   * Kept registered although nothing navigates here any more: the Plan tab
+   * renders the same screen once a day exists, and one plan in one place is
+   * the point. A saved navigation state from an older launch can still name
+   * this route, and restoring into a route the navigator does not know is a
+   * crash — so it stays until that is no longer possible.
    */
   DayPlan: undefined;
   /** Live guidance through the planned day, one stop at a time (PRD F7). */

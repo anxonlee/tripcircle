@@ -19,6 +19,7 @@ import { PlacesScreen } from './src/screens/PlacesScreen';
 import { PlanScreen } from './src/screens/PlanScreen';
 import { PlanSuggestScreen } from './src/screens/PlanSuggestScreen';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { DayOutBanner } from './src/components/DayOutBanner';
 import { restorableState, type SavedNav } from './src/lib/navState';
 import { useAuthStore } from './src/store/useAuthStore';
 import { CostSplitScreen } from './src/screens/CostSplitScreen';
@@ -45,17 +46,42 @@ installGlobalErrorHandler();
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<TabParamList>();
 
+/**
+ * The Plan tab is the plan, once there is one.
+ *
+ * It used to be the suggestion screen always, so anyone who had already
+ * chosen their places had to walk through it to reach the day they had
+ * built — every time they came back to the tab. The suggestion screen is
+ * for people with nothing chosen yet; that is the only time it is the
+ * answer to "Plan".
+ *
+ * Both are the same tab rather than a redirect, so there is no frame of the
+ * wrong screen and no entry pushed onto the history to back out of.
+ */
+function PlanTab() {
+  const hasDay = useTripStore((s) => s.selectedPlaceIds.length > 0);
+  return hasDay ? <PlanScreen /> : <PlanSuggestScreen />;
+}
+
 function Tabs() {
   return (
-    <Tab.Navigator
-      tabBar={(props) => <TabBar {...props} />}
-      screenOptions={{ headerShown: false }}
-    >
-      <Tab.Screen name="Memories" component={MemoriesScreen} />
-      <Tab.Screen name="Explore" component={PlacesScreen} />
-      <Tab.Screen name="Plan" component={PlanSuggestScreen} />
-      <Tab.Screen name="Settings" component={SettingsScreen} />
-    </Tab.Navigator>
+    <View style={styles.root}>
+      {/*
+        Above the tabs, so it is on every screen a running day can be
+        wandered away from — and outside the navigator, so switching tabs
+        does not re-animate it.
+      */}
+      <DayOutBanner />
+      <Tab.Navigator
+        tabBar={(props) => <TabBar {...props} />}
+        screenOptions={{ headerShown: false }}
+      >
+        <Tab.Screen name="Memories" component={MemoriesScreen} />
+        <Tab.Screen name="Explore" component={PlacesScreen} />
+        <Tab.Screen name="Plan" component={PlanTab} />
+        <Tab.Screen name="Settings" component={SettingsScreen} />
+      </Tab.Navigator>
+    </View>
   );
 }
 
@@ -175,7 +201,14 @@ export default function App() {
           >
             <Stack.Screen name="Tabs" component={Tabs} />
             <Stack.Screen name="Setup" component={SetupScreen} />
-            <Stack.Screen name="DayPlan" component={PlanScreen} />
+            {/*
+              Reachable only by a restored navigation state written before
+              the Plan tab became the plan. It keeps its Back chip, because
+              in that mounting there genuinely is something behind it.
+            */}
+            <Stack.Screen name="DayPlan">
+              {() => <PlanScreen showBack />}
+            </Stack.Screen>
             <Stack.Screen name="StartDay" component={StartDayScreen} />
             <Stack.Screen name="Stamp" component={StampScreen} />
             <Stack.Screen name="AddPlace" component={AddPlaceScreen} />

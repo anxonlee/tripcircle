@@ -1,6 +1,7 @@
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Haptics from 'expo-haptics';
 import { GestureDetector, type PanGesture } from 'react-native-gesture-handler';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -55,7 +56,12 @@ import { useMyPlacesStore } from '../store/useMyPlacesStore';
 import { useTripStore, useUiStore } from '../store/useTripStore';
 import { categoryColors, colors, pressedWell, tint } from '../theme/colors';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'DayPlan'>;
+/**
+ * Navigation comes from context rather than props, because this screen is
+ * mounted two ways: as the Plan tab, once a day exists, and as a pushed
+ * stack screen from Explore. Props typed to one of those would not satisfy
+ * the other.
+ */
 
 /**
  * How long a stop must be held to open arrange mode.
@@ -114,7 +120,18 @@ const OBJECTIVES: { goal: Goal; label: string; icon: 'piggy-bank-outline' | 'sca
  * All four plans are solved once when the selection changes and held in a
  * memo. Switching objective, by tap or by swipe, only reads that cache.
  */
-export function PlanScreen({ navigation }: Props) {
+/**
+ * `showBack` is passed by whoever mounts this, and is not derived.
+ *
+ * Asking the navigator looked cleaner and was wrong: `useNavigation` returns
+ * the nearest navigator, which as the Plan tab is the tab navigator, so
+ * `canGoBack()` answered about tab history — true as soon as the user had
+ * visited another tab — and the chip appeared on a screen with nothing
+ * behind it.
+ */
+export function PlanScreen({ showBack = false }: { showBack?: boolean } = {}) {
+  const navigation =
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const insets = useSafeAreaInsets();
   const startPlace = useTripStore((s) => s.startPlace);
   const myPlaces = useMyPlacesStore((s) => s.places);
@@ -818,13 +835,15 @@ export function PlanScreen({ navigation }: Props) {
         })}
       </MapView>
 
-      <Pressable
-        style={[styles.backChip, { top: insets.top + 8 }]}
-        onPress={() => navigation.goBack()}
-      >
-        <MaterialCommunityIcons name="chevron-left" size={18} color={colors.textPrimary} />
-        <Text style={styles.backChipText}>Back</Text>
-      </Pressable>
+      {showBack && (
+        <Pressable
+          style={[styles.backChip, { top: insets.top + 8 }]}
+          onPress={() => navigation.goBack()}
+        >
+          <MaterialCommunityIcons name="chevron-left" size={18} color={colors.textPrimary} />
+          <Text style={styles.backChipText}>Back</Text>
+        </Pressable>
+      )}
 
 
       <BottomSheet

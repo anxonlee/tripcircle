@@ -156,7 +156,7 @@ export function WishlistScreen({ navigation, route }: Props) {
           text: 'Plan them',
           onPress: () => {
             setSelection(usable.map((i) => i.placeId));
-            navigation.navigate('DayPlan');
+            navigation.navigate('Tabs', { screen: 'Plan' });
           },
         },
       ]

@@ -135,7 +135,7 @@ export function SummaryScreen({ embedded = false }: { embedded?: boolean } = {})
    */
   const planOverdue = (placeId: string) => {
     if (!selectedIds.includes(placeId)) togglePlace(placeId);
-    navigation.navigate('DayPlan');
+    navigation.navigate('Tabs', { screen: 'Plan' });
   };
 
   const onShare = () => {
@@ -283,7 +283,7 @@ export function SummaryScreen({ embedded = false }: { embedded?: boolean } = {})
         )}
 
         {/* The forward hook every recap ends on (PRD §3A.4). */}
-        <Pressable style={styles.primary} onPress={() => navigation.navigate('DayPlan')}>
+        <Pressable style={styles.primary} onPress={() => navigation.navigate('Tabs', { screen: 'Plan' })}>
           <MaterialCommunityIcons name="map-outline" size={16} color="#FFFFFF" />
           <Text style={styles.primaryText}>Plan a day out</Text>
         </Pressable>

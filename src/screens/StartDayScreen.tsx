@@ -50,6 +50,8 @@ export function StartDayScreen({ navigation }: Props) {
   const pinnedTimes = useTripStore((s) => s.pinnedTimes);
   const step = useTripStore((s) => s.startDayStep);
   const setStep = useTripStore((s) => s.setStartDayStep);
+  const beginDayOut = useTripStore((s) => s.beginDayOut);
+  const endDayOut = useTripStore((s) => s.endDayOut);
   const visits = useDiaryStore((s) => s.visits);
 
   const [legOptionsFn, setLegOptionsFn] = useState<LegOptionsFn | null>(null);
@@ -150,6 +152,41 @@ export function StartDayScreen({ navigation }: Props) {
     dayOrder,
     pinMap,
   ]);
+
+  /**
+   * Whether this screen is actually going to run a day, rather than refuse.
+   *
+   * Every refusal below is included, and that is the whole point: `plan` is
+   * computed before any of them, so keying off the plan alone marked a day
+   * started that the screen then declined to run — leaving a banner
+   * pointing at a screen that says "your day window has passed".
+   */
+  const willRun =
+    Boolean(startPlace) &&
+    selectedPlaces.length > 0 &&
+    anchorMin <= LATEST_HOME_BY_MIN - MIN_DAY_WINDOW_MIN &&
+    anchorMin < homeByMin &&
+    Boolean(plan) &&
+    plan!.stops.length > 0 &&
+    // Same test as the "everywhere is shut" refusal below, computed here
+    // because hooks cannot live after an early return.
+    plan!.stops.some(
+      (st) => !st.place.openHours || st.beginMin < st.place.openHours.close
+    );
+
+  /**
+   * The window has gone by while the day was still marked as running —
+   * somebody set off and never finished. Nothing more can happen today, so
+   * the outing is over; the places stay chosen, which is what this screen
+   * tells them.
+   */
+  const windowGone =
+    anchorMin > LATEST_HOME_BY_MIN - MIN_DAY_WINDOW_MIN || anchorMin >= homeByMin;
+
+  useEffect(() => {
+    if (willRun) beginDayOut();
+    else if (windowGone) endDayOut();
+  }, [willRun, windowGone, beginDayOut, endDayOut]);
 
   /** Places stamped since midnight — what "done" means on this screen. */
   const stampedToday = useMemo(() => {
@@ -267,7 +304,16 @@ export function StartDayScreen({ navigation }: Props) {
           <Text style={styles.emptyText}>
             Back at {startPlace.name} by {formatDayEnd(plan.homeMin)}
           </Text>
-          <Pressable style={styles.primary} onPress={() => navigation.goBack()}>
+          <Pressable
+            style={styles.primary}
+            onPress={() => {
+              // Finishing is the one exit that ends the outing. Closing the
+              // screen does not: leaving the app mid-day is the normal way
+              // to use it, which is what the banner exists for.
+              endDayOut();
+              navigation.goBack();
+            }}
+          >
             <Text style={styles.primaryText}>Done</Text>
           </Pressable>
         </View>

@@ -86,6 +86,20 @@ interface TripState {
   startDayStep: number;
   setStartDayStep: (step: number) => void;
   /**
+   * When the user actually set off, or null if they have not.
+   *
+   * `startDayStep` cannot answer this: step zero means both "not started"
+   * and "standing at the first stop", and every screen that wants to know
+   * whether a day is underway has had to guess between them. A banner that
+   * guessed would appear for people who had merely looked at a plan.
+   *
+   * Persisted, because a day out runs for hours across many launches — the
+   * same reason the step is.
+   */
+  dayStartedAt: number | null;
+  beginDayOut: () => void;
+  endDayOut: () => void;
+  /**
    * The order the user arranged, by place id (PRD F6, §3.4).
    *
    * `null` means they have not arranged one and the optimiser is free to
@@ -171,6 +185,7 @@ export const useTripStore = create<TripState>()(
               ? s.selectedPlaceIds.filter((x) => x !== id)
               : [...s.selectedPlaceIds, id],
             startDayStep: 0,
+            dayStartedAt: null,
             pinnedTimes: removing ? rest : s.pinnedTimes,
           };
         }),
@@ -178,15 +193,32 @@ export const useTripStore = create<TripState>()(
       // opening someone else's link — so the times belong to a day that no
       // longer exists.
       setSelection: (ids) =>
-        set({ selectedPlaceIds: ids, startDayStep: 0, pinnedTimes: {} }),
+        set({
+          selectedPlaceIds: ids,
+          startDayStep: 0,
+          dayStartedAt: null,
+          pinnedTimes: {},
+        }),
       clearSelection: () =>
-        set({ selectedPlaceIds: [], startDayStep: 0, pinnedTimes: {} }),
+        set({
+          selectedPlaceIds: [],
+          startDayStep: 0,
+          dayStartedAt: null,
+          pinnedTimes: {},
+        }),
       setGoal: (g) => set({ goal: g }),
       setDayWindow: (window) => set(clampDayWindow(window)),
       suggestionBias: 'familiar',
       setSuggestionBias: (b) => set({ suggestionBias: b }),
       startDayStep: 0,
       setStartDayStep: (step) => set({ startDayStep: Math.max(0, step) }),
+      dayStartedAt: null,
+      // Idempotent: opening Start day again mid-outing is coming back to it,
+      // not setting off a second time, and restamping the clock would make
+      // "since when" wrong.
+      beginDayOut: () =>
+        set((s) => (s.dayStartedAt === null ? { dayStartedAt: Date.now() } : s)),
+      endDayOut: () => set({ dayStartedAt: null, startDayStep: 0 }),
       dayOrder: null,
       setDayOrder: (ids) => set({ dayOrder: ids }),
       clearDayOrder: () => set({ dayOrder: null }),
@@ -219,6 +251,7 @@ export const useTripStore = create<TripState>()(
         hasCar: s.hasCar,
         suggestionBias: s.suggestionBias,
         startDayStep: s.startDayStep,
+        dayStartedAt: s.dayStartedAt,
         dayOrder: s.dayOrder,
         pinnedTimes: s.pinnedTimes,
       }),

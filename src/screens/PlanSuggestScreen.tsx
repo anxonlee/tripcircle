@@ -276,8 +276,11 @@ export function PlanSuggestScreen() {
    * empty selection — never over one (§3.3.0).
    */
   const planIt = () => {
+    // Writing the selection is the whole action: this screen only renders
+    // when nothing is chosen, so the moment something is, the Plan tab
+    // swaps to the plan underneath us. Navigating as well would push a
+    // second copy of the same screen with a Back chip on it.
     if (!hasSelection) setSelection(dayItems.map((s) => s.place.id));
-    navigation.navigate('DayPlan');
   };
 
   return (

@@ -123,7 +123,7 @@ export function PostScreen({ navigation, route }: Props) {
           text: 'Plan it',
           onPress: () => {
             setSelection(usable.map((p) => p.placeId));
-            navigation.navigate('DayPlan');
+            navigation.navigate('Tabs', { screen: 'Plan' });
           },
         },
       ]

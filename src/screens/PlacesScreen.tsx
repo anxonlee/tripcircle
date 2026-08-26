@@ -358,7 +358,7 @@ export function PlacesScreen({ navigation }: Props) {
           {selectedIds.length >= 2 && (
             <Pressable
               style={styles.planBtn}
-              onPress={() => navigation.navigate('DayPlan')}
+              onPress={() => navigation.navigate('Tabs', { screen: 'Plan' })}
               accessibilityRole="button"
               accessibilityLabel={`Plan the day with your ${selectedIds.length} places`}
             >
