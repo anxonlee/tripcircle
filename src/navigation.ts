@@ -58,6 +58,12 @@ export type RootStackParamList = {
   Post: { id: string };
   /** Publishing the day currently on the Plan screen. */
   PublishDay: undefined;
+  /**
+   * Multi-day trips (Phase 4): the shelf, and one trip's days. Local-only,
+   * like the diary — the network features live behind Wishlists and Feed.
+   */
+  Trips: undefined;
+  Trip: { id: string };
   Privacy: undefined;
   Diary: undefined;
   EditVisit: { visitId: string };

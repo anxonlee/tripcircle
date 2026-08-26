@@ -9,6 +9,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { installGlobalErrorHandler } from './src/services/crashLog';
 import { useSharedDayLink } from './src/hooks/useSharedDayLink';
+import { installTripWriteBack } from './src/lib/tripBridge';
 import { TabBar } from './src/components/TabBar';
 import type { RootStackParamList, TabParamList } from './src/navigation';
 import { AddPlaceScreen } from './src/screens/AddPlaceScreen';
@@ -31,6 +32,8 @@ import { WishlistsScreen } from './src/screens/WishlistsScreen';
 import { PrivacyScreen } from './src/screens/PrivacyScreen';
 import { SetupScreen } from './src/screens/SetupScreen';
 import { StartDayScreen } from './src/screens/StartDayScreen';
+import { TripScreen } from './src/screens/TripScreen';
+import { TripsScreen } from './src/screens/TripsScreen';
 import { StampScreen } from './src/screens/StampScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 import { useDiaryStore } from './src/store/useDiaryStore';
@@ -178,6 +181,15 @@ export default function App() {
     useAuthStore.getState().init();
   }, []);
 
+  /*
+   * The trip write-back: while a trip day is open in the planner, edits
+   * made anywhere — Explore, Plan, Start day — flow back to the trip. At
+   * the root because the borrow outlives any screen.
+   */
+  useEffect(() => {
+    installTripWriteBack();
+  }, []);
+
   if (!hydrated || savedNav === undefined) {
     return (
       <View style={styles.splash}>
@@ -234,6 +246,8 @@ export default function App() {
             <Stack.Screen name="Feed" component={FeedScreen} />
             <Stack.Screen name="Post" component={PostScreen} />
             <Stack.Screen name="PublishDay" component={PublishDayScreen} />
+            <Stack.Screen name="Trips" component={TripsScreen} />
+            <Stack.Screen name="Trip" component={TripScreen} />
             <Stack.Screen name="Privacy" component={PrivacyScreen} />
             <Stack.Screen name="Diary" component={DiaryScreen} />
             <Stack.Screen name="EditVisit" component={EditVisitScreen} />

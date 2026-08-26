@@ -54,6 +54,7 @@ import { useDiaryStore } from '../store/useDiaryStore';
 import { useFoundPlacesStore } from '../store/useFoundPlacesStore';
 import { useMyPlacesStore } from '../store/useMyPlacesStore';
 import { useTripStore, useUiStore } from '../store/useTripStore';
+import { useTripsStore } from '../store/useTripsStore';
 import { categoryColors, colors, pressedWell, tint } from '../theme/colors';
 
 /**
@@ -130,6 +131,31 @@ export function PlanScreen({ showBack = false }: { showBack?: boolean } = {}) {
   const homeByMin = useTripStore((s) => s.homeByMin);
   const setDayWindow = useTripStore((s) => s.setDayWindow);
   const dayOrder = useTripStore((s) => s.dayOrder);
+  /**
+   * The trip day this plan belongs to, when it belongs to one. The planner
+   * itself never knows — the bridge loads and writes back — but the screen
+   * has to say so, because edits here are reaching a trip and silence about
+   * that would make the write-back feel like a haunting.
+   *
+   * Two selectors returning stored references, then a memo. The obvious
+   * single selector built a fresh object each run, and zustand's equality
+   * is reference equality — a value that is always new is a component that
+   * always re-renders, which React stops with "maximum update depth
+   * exceeded" rather than letting it spin.
+   */
+  const activeDayPtr = useTripsStore((s) => s.activeDay);
+  const activeTrip = useTripsStore((s) =>
+    s.activeDay === null
+      ? null
+      : s.trips.find((t) => t.id === s.activeDay!.tripId) ?? null
+  );
+  const activeTripDay = useMemo(() => {
+    if (!activeDayPtr || !activeTrip) return null;
+    const index = activeTrip.days.findIndex((d) => d.id === activeDayPtr.dayId);
+    return index >= 0
+      ? { tripId: activeTrip.id, name: activeTrip.name, index }
+      : null;
+  }, [activeDayPtr, activeTrip]);
   const setDayOrder = useTripStore((s) => s.setDayOrder);
   const clearDayOrder = useTripStore((s) => s.clearDayOrder);
   const pinnedTimes = useTripStore((s) => s.pinnedTimes);
@@ -892,6 +918,27 @@ export function PlanScreen({ showBack = false }: { showBack?: boolean } = {}) {
                 window={{ dayStartMin, homeByMin }}
                 onChange={setDayWindow}
               />
+              {activeTripDay && (
+                <Pressable
+                  onPress={() => navigation.navigate('Trip', { id: activeTripDay.tripId })}
+                  hitSlop={8}
+                  style={({ pressed }) => [
+                    styles.tripChip,
+                    pressed && styles.ownOrderPressed,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`This is day ${activeTripDay.index + 1} of ${activeTripDay.name} — open the trip`}
+                >
+                  <MaterialCommunityIcons
+                    name="bag-suitcase-outline"
+                    size={12}
+                    color={colors.accent}
+                  />
+                  <Text style={styles.ownOrderText} numberOfLines={1}>
+                    {activeTripDay.name} · Day {activeTripDay.index + 1}
+                  </Text>
+                </Pressable>
+              )}
               {/*
                 Two jobs, and it only exists once the first one is true: a
                 stored order means the optimiser is no longer sequencing the
@@ -1439,6 +1486,17 @@ const styles = StyleSheet.create({
   },
   ownOrderText: { fontSize: 12, fontWeight: '500', color: colors.accent },
   ownOrderPressed: { opacity: 0.6 },
+  /** Same shape as the order chip: a fact about this day, worn beside it. */
+  tripChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 9,
+    backgroundColor: tint(colors.accent),
+    maxWidth: 160,
+  },
   suggestBlock: {
     marginHorizontal: 16,
     marginTop: 8,

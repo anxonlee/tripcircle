@@ -224,6 +224,12 @@ export function SettingsScreen() {
             value={startPlace ? startPlace.name : 'Not set'}
             onPress={() => navigation.navigate('Setup')}
           />
+          <Row
+            icon="bag-suitcase-outline"
+            label="Trips"
+            onPress={() => navigation.navigate('Trips')}
+            divided
+          />
         </View>
 
         {/*
