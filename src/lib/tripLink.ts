@@ -254,8 +254,12 @@ export function unresolvedCount(url: string, known: Set<string>): number {
  * bug to find in a beta, and the whole grammar here is five keys.
  */
 function parseDayUrl(url: string): Map<string, string> | null {
+  return parseLinkUrl(url, 'd');
+}
+
+function parseLinkUrl(url: string, path: string): Map<string, string> | null {
   const trimmed = url.trim();
-  const prefix = `${TRIP_LINK_SCHEME}://d?`;
+  const prefix = `${TRIP_LINK_SCHEME}://${path}?`;
   if (!trimmed.toLowerCase().startsWith(prefix)) return null;
   // Chat clients cheerfully append a closing bracket or full stop to a bare
   // link. Neither belongs to any value we read, and both make ids unknown.
@@ -304,3 +308,136 @@ function parseGoal(raw: string | null): Goal {
 
 /** Exported for the tests, so the goal list cannot drift from the encoder. */
 export const SHAREABLE_GOALS = GOALS;
+
+/**
+ * A whole trip as a link: `pirtsf://t?...`, one set of indexed keys per day.
+ *
+ *   pirtsf://t?v=1&c=sf&n=SF%20weekend
+ *     &p0=ferry-building,union-square&w0=540-1200&g0=balanced&t0=union-square:780
+ *     &p1=la-taqueria&w1=600-1230&g1=fastest
+ *
+ * A different path rather than a bumped version, on purpose: builds that
+ * only know `://d?` see a trip link as not-a-day-link and ignore it
+ * quietly, which is the correct reading — nothing is misread, there is
+ * simply nothing there for them.
+ *
+ * WHAT IS NEVER IN A TRIP LINK: the stays. §3.1 keeps start places out of
+ * day links, and a stay is where someone sleeps — strictly more sensitive
+ * than where they set out from. Same rule, same mechanism: no field for it.
+ * The receiver's days plan from their own anchor until they choose stays of
+ * their own.
+ */
+
+export interface SharedTripDay {
+  placeIds: string[];
+  window: DayWindow;
+  goal: Goal;
+  pinnedTimes?: Record<string, number>;
+}
+
+export interface SharedTrip {
+  city: string;
+  name: string;
+  days: SharedTripDay[];
+}
+
+/** Most days one link will carry. Past this it is an itinerary export, not a link. */
+export const MAX_LINK_DAYS = 14;
+
+export function encodeTripLink(trip: SharedTrip): string {
+  const params = [`v=${TRIP_LINK_VERSION}`, `c=${trip.city}`];
+  const name = trip.name.trim();
+  if (name) params.push(`n=${encodeURIComponent(name).slice(0, 120)}`);
+  // Empty days are skipped and the numbering closes over them: a shared
+  // trip is its content, and "Day 3 (nothing)" is not content.
+  const days = trip.days
+    .map((d) => ({ ...d, placeIds: d.placeIds.filter((id) => PLACE_ID.test(id)) }))
+    .filter((d) => d.placeIds.length > 0)
+    .slice(0, MAX_LINK_DAYS);
+  days.forEach((d, i) => {
+    const w = clampDayWindow(d.window);
+    params.push(`p${i}=${d.placeIds.join(',')}`);
+    params.push(`w${i}=${w.dayStartMin}-${w.homeByMin}`);
+    params.push(`g${i}=${d.goal}`);
+    const pins = encodePins(d.pinnedTimes, d.placeIds, w);
+    if (pins) params.push(`t${i}=${pins}`);
+  });
+  return `${TRIP_LINK_SCHEME}://t?${params.join('&')}`;
+}
+
+export type TripDecodeResult =
+  | { ok: true; trip: SharedTrip }
+  | { ok: false; reason: DecodeFailure };
+
+export function decodeTripLink(url: string, known: Set<string>): TripDecodeResult {
+  const params = parseLinkUrl(url, 't');
+  if (!params) return { ok: false, reason: { kind: 'notADayLink' } };
+
+  const version = Number(params.get('v') ?? '');
+  if (!Number.isFinite(version) || version < 1) {
+    return { ok: false, reason: { kind: 'notADayLink' } };
+  }
+  if (version > TRIP_LINK_VERSION) {
+    return { ok: false, reason: { kind: 'tooNew', version } };
+  }
+
+  const city = params.get('c') ?? '';
+  if (city !== DATASET_CITY) {
+    return { ok: false, reason: { kind: 'otherCity', city: city || 'unknown' } };
+  }
+
+  const days: SharedTripDay[] = [];
+  for (let i = 0; i < MAX_LINK_DAYS; i++) {
+    const rawPlaces = params.get(`p${i}`);
+    // The first missing index ends the trip. Indexes are written densely,
+    // so a gap is truncation or tampering, and reading past it would
+    // attach later days to the wrong numbers.
+    if (rawPlaces === null || rawPlaces === undefined) break;
+    const placeIds = rawPlaces
+      .split(',')
+      .map((id) => id.trim())
+      .filter((id) => PLACE_ID.test(id) && known.has(id));
+    const unique = placeIds.filter((id, at) => placeIds.indexOf(id) === at);
+    const window = parseWindow(params.get(`w${i}`) ?? null);
+    // A day whose every place is unknown still occupies its slot: dropping
+    // it would renumber the days after it, and "Day 2" in the sender's
+    // message must keep meaning day 2.
+    days.push({
+      placeIds: unique,
+      window,
+      goal: parseGoal(params.get(`g${i}`) ?? null),
+      pinnedTimes: parsePins(params.get(`t${i}`) ?? null, unique, window),
+    });
+  }
+  if (days.every((d) => d.placeIds.length === 0)) {
+    return { ok: false, reason: { kind: 'empty' } };
+  }
+
+  let name = 'Shared trip';
+  try {
+    const rawName = params.get('n');
+    if (rawName) name = decodeURIComponent(rawName).slice(0, 60).trim() || name;
+  } catch {
+    // A malformed escape is a bad name, not a bad trip.
+  }
+
+  return { ok: true, trip: { city, name, days } };
+}
+
+/** How many places, across all days, this build could not resolve. */
+export function unresolvedTripCount(url: string, known: Set<string>): number {
+  const params = parseLinkUrl(url, 't');
+  if (!params) return 0;
+  let missing = 0;
+  for (let i = 0; i < MAX_LINK_DAYS; i++) {
+    const raw = params.get(`p${i}`);
+    if (raw === null || raw === undefined) break;
+    const seen = new Set<string>();
+    for (const id of raw.split(',').map((x) => x.trim()).filter(Boolean)) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      if (!PLACE_ID.test(id) || !known.has(id)) missing += 1;
+    }
+  }
+  return missing;
+}

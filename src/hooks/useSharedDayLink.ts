@@ -3,7 +3,14 @@ import { detachFromTrip } from '../lib/tripBridge';
 import { Alert, Linking } from 'react-native';
 import { placesService } from '../services/places';
 import { useTripStore } from '../store/useTripStore';
-import { decodeDayLink, unresolvedCount, type DecodeFailure } from '../lib/tripLink';
+import {
+  decodeDayLink,
+  decodeTripLink,
+  unresolvedCount,
+  unresolvedTripCount,
+  type DecodeFailure,
+} from '../lib/tripLink';
+import { useTripsStore } from '../store/useTripsStore';
 
 /**
  * Receiving a shared day (§14 F11, §342 "clone re-anchors and re-optimises").
@@ -74,7 +81,44 @@ export function useSharedDayLink(): void {
 
       // Marked only once the link is recognised as ours. A URL for some other
       // part of the app should stay available to whatever does handle it.
-      if (!result.ok && result.reason.kind === 'notADayLink') return;
+      if (!result.ok && result.reason.kind === 'notADayLink') {
+        // Not a day — maybe a whole trip. The two share every refusal
+        // (version, city, empty), so a trip that fails those gets the same
+        // sentences a day would.
+        const asTrip = decodeTripLink(url, known);
+        if (!asTrip.ok && asTrip.reason.kind === 'notADayLink') return;
+        handled.current = { url, at: Date.now() };
+        if (!asTrip.ok) {
+          const { title, body } = explain(asTrip.reason);
+          Alert.alert(title, body);
+          return;
+        }
+        const t = asTrip.trip;
+        const tripMissing = unresolvedTripCount(url, known);
+        const placeCount = t.days.reduce((n, d) => n + d.placeIds.length, 0);
+        Alert.alert(
+          `Save "${t.name}"?`,
+          [
+            `${t.days.length} day${t.days.length === 1 ? '' : 's'}, ${placeCount} place${placeCount === 1 ? '' : 's'}. It goes on your Trips shelf — nothing you are planning is touched.`,
+            tripMissing > 0
+              ? `${tripMissing} place${tripMissing === 1 ? ' is' : 's are'} not in your places and ${tripMissing === 1 ? 'was' : 'were'} left out.`
+              : null,
+            'Each day starts from your own start place until you choose stays.',
+          ]
+            .filter(Boolean)
+            .join('\n\n'),
+          [
+            { text: 'Not now', style: 'cancel' },
+            {
+              text: 'Save trip',
+              onPress: () => {
+                useTripsStore.getState().importTrip(t.name, t.days);
+              },
+            },
+          ]
+        );
+        return;
+      }
       handled.current = { url, at: Date.now() };
 
       if (!result.ok) {

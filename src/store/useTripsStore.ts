@@ -44,6 +44,22 @@ interface TripsState {
     s: { startPlace: StartPlace | null; dayWindowSet: boolean } | null
   ) => void;
   createTrip: (name: string) => Trip;
+  /**
+   * Adopt a whole shared trip. Days arrive with an order — the sender's
+   * arrangement is the shared artefact, same as a shared day — and without
+   * stays, which links never carry. Nothing here is merged: a shared trip
+   * is a new trip, and colliding it into an existing one would need
+   * answers nobody has asked the user for.
+   */
+  importTrip: (
+    name: string,
+    days: {
+      placeIds: string[];
+      window: DayWindow;
+      goal: Trip['days'][number]['goal'];
+      pinnedTimes?: Record<string, number>;
+    }[]
+  ) => Trip;
   renameTrip: (tripId: string, name: string) => void;
   deleteTrip: (tripId: string) => void;
   addDay: (tripId: string) => void;
@@ -85,6 +101,27 @@ export const useTripsStore = create<TripsState>()(
       setSavedPlanner: (savedPlanner) => set({ savedPlanner }),
       createTrip: (name) => {
         const trip = makeTrip(name.trim() || 'Trip');
+        set((s) => ({ trips: [trip, ...s.trips] }));
+        return trip;
+      },
+      importTrip: (name, days) => {
+        const base = makeTrip(name.trim() || 'Shared trip');
+        const trip: Trip = {
+          ...base,
+          days: days.map((d) => ({
+            ...makeDay(),
+            placeIds: d.placeIds,
+            // The sender's arrangement, held against the optimiser the way
+            // a shared day's is — but only when the day has places: an
+            // empty [] order is not an arrangement, it is a lock with
+            // nothing behind it.
+            dayOrder: d.placeIds.length > 0 ? d.placeIds : null,
+            pinnedTimes: d.pinnedTimes ?? {},
+            window: clampDayWindow(d.window),
+            goal: d.goal,
+          })),
+        };
+        if (trip.days.length === 0) trip.days = base.days;
         set((s) => ({ trips: [trip, ...s.trips] }));
         return trip;
       },

@@ -6,6 +6,7 @@ import {
   Modal,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -18,6 +19,7 @@ import { formatTime, makeStartPlace } from '../lib/geo';
 import { detachFromTrip, loadDayIntoPlanner } from '../lib/tripBridge';
 import type { RootStackParamList } from '../navigation';
 import { placesService } from '../services/places';
+import { DATASET_CITY, encodeTripLink } from '../lib/tripLink';
 import { useTripStore } from '../store/useTripStore';
 import { useTripsStore } from '../store/useTripsStore';
 import { colors, tint } from '../theme/colors';
@@ -163,6 +165,38 @@ export function TripScreen({ navigation, route }: Props) {
       },
     ]);
 
+  /**
+   * The trip as a link. Days travel with their places, windows, goals and
+   * pins; stays never — the encoder has no field for one, and the message
+   * says the receiver's days start from their own anchor. The order shared
+   * is the order this screen shows: a hand-arranged day sends its
+   * arrangement, an unarranged one sends the selection.
+   */
+  const shareTrip = async () => {
+    const days = trip.days.filter((d) => d.placeIds.length > 0);
+    if (days.length === 0) {
+      Alert.alert('Nothing to share yet', 'Put some places on the days first.');
+      return;
+    }
+    const link = encodeTripLink({
+      city: DATASET_CITY,
+      name: trip.name,
+      days: days.map((d) => ({
+        placeIds: d.dayOrder ?? d.placeIds,
+        window: d.window,
+        goal: d.goal,
+        pinnedTimes: d.pinnedTimes,
+      })),
+    });
+    const placeCount = days.reduce((n, d) => n + d.placeIds.length, 0);
+    await Share.share({
+      message: [
+        `${trip.name} — ${days.length} day${days.length === 1 ? '' : 's'}, ${placeCount} place${placeCount === 1 ? '' : 's'} in the Bay Area.`,
+        `Open in PIRT: ${link}`,
+      ].join('\n\n'),
+    });
+  };
+
   const rename = () => {
     Alert.prompt?.(
       'Rename trip',
@@ -187,6 +221,18 @@ export function TripScreen({ navigation, route }: Props) {
           <Text style={styles.title} numberOfLines={1}>
             {trip.name}
           </Text>
+        </Pressable>
+        <Pressable
+          onPress={() => void shareTrip()}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Share this trip as a link"
+        >
+          <MaterialCommunityIcons
+            name="tray-arrow-up"
+            size={20}
+            color={colors.textSecondary}
+          />
         </Pressable>
         <Pressable onPress={confirmDeleteTrip} hitSlop={8}>
           <MaterialCommunityIcons
