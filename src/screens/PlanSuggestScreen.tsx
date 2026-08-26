@@ -9,7 +9,7 @@ import MapView, { Marker, Polyline } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CategoryPin, PIN_ANCHOR, PinSlot, StartPin } from '../components/CategoryPin';
 import { categoryIcon } from '../components/icons';
-import { formatPlacePrice } from '../lib/format';
+import { formatDuration, formatPlacePrice } from '../lib/format';
 import { openStatus } from '../lib/openStatus';
 
 import {
@@ -425,7 +425,7 @@ export function PlanSuggestScreen() {
                   {i + 1}. {s.place.name}
                 </Text>
                 <Text style={styles.meta}>
-                  {s.place.district} · {s.place.visitDurationMin} min
+                  {s.place.district} · {formatDuration(s.place.visitDurationMin)}
                   {formatPlacePrice(s.place)
                     ? ` · ${formatPlacePrice(s.place)}`
                     : ''}

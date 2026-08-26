@@ -474,7 +474,7 @@ export function StartDayScreen({ navigation }: Props) {
                   <Text style={styles.stopName}>{current.place.name}</Text>
                   <Text style={styles.stopMeta}>
                     Arrive {formatDayTime(current.arriveMin)} ·{' '}
-                    {current.place.visitDurationMin} min
+                    {formatDuration(current.place.visitDurationMin)}
                     {formatPlacePrice(current.place)
                       ? ` · ${formatPlacePrice(current.place)}`
                       : ''}

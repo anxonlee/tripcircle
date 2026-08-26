@@ -585,7 +585,7 @@ export function PlanScreen({ showBack = false }: { showBack?: boolean } = {}) {
                 {formatPlacePrice(s.place) && s.place.priceBand !== 'free'
                   ? `${formatPlacePrice(s.place)} · `
                   : ''}
-                {s.place.visitDurationMin} min visit
+                {formatDuration(s.place.visitDurationMin)} visit
                 {s.waitMin >= 15 ? ` · wait ${formatDuration(s.waitMin)}` : ''}
               </Text>
               {s.warnings.map((w, i) => (
@@ -1132,7 +1132,7 @@ export function PlanScreen({ showBack = false }: { showBack?: boolean } = {}) {
                     <View style={styles.suggestBody}>
                       <Text style={styles.suggestName}>{s.place.name}</Text>
                       <Text style={styles.suggestMeta}>
-                        {s.place.district} · {s.place.visitDurationMin} min
+                        {s.place.district} · {formatDuration(s.place.visitDurationMin)}
                         {formatPlacePrice(s.place)
                           ? ` · ${formatPlacePrice(s.place)}`
                           : ''}
