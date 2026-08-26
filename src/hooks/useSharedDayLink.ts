@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { detachFromTrip } from '../lib/tripBridge';
 import { Alert, Linking } from 'react-native';
 import { placesService } from '../services/places';
 import { useTripStore } from '../store/useTripStore';
@@ -129,6 +130,13 @@ export function useSharedDayLink(): void {
         {
           text: 'Open it',
           onPress: () => {
+            /*
+             * A shared link is an ad-hoc day, never an edit to a trip. With
+             * a trip day active the write-back would have copied the link's
+             * day over it — the sender's places silently replacing Day 3 of
+             * someone's trip — so the trip lets go first.
+             */
+            detachFromTrip();
             setSelection(placeIds);
             // The sender's arrangement is the shared artefact. Setting the
             // order is what stops the optimiser resequencing it on arrival

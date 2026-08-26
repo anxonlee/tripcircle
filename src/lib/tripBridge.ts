@@ -1,0 +1,151 @@
+import { dayFromPlanner, stayForDay, type Trip } from '../domain/trip';
+import { useTripStore } from '../store/useTripStore';
+import { useTripsStore } from '../store/useTripsStore';
+
+/**
+ * The bridge between the trips shelf and the single-day planner — the one
+ * file allowed to know both stores exist.
+ *
+ * Opening a trip day copies it into `useTripStore`, and from that moment
+ * every screen the planner powers works on it unchanged: Explore toggles its
+ * places, Plan orders and pins it, Start day walks it, stamping stamps it.
+ * None of them learn trips exist. Edits return through a store subscription
+ * that maps the planner's state back into the day and writes it to the
+ * shelf.
+ *
+ * The write-back is one-directional and keyed on `activeDay`: while the
+ * pointer is set the planner is the day's editor, and when it is null the
+ * planner is what it always was, an ad-hoc single day.
+ */
+
+/*
+ * What the bridge saves of the user's own state lives in the trips store
+ * (`savedPlanner`), because the borrow it undoes is persistent: a trip runs
+ * for days across many launches. Only the start place and the window flag
+ * are saved. The selection is deliberately not — opening a trip day
+ * replaces the day on the table exactly the way opening a shared link does,
+ * behind the same confirm. But the start place is not day state: it is
+ * where the user lives their ordinary days from, and a trip stay
+ * overwriting it for good would mean coming home from Tokyo anchored to a
+ * hotel there.
+ */
+
+/**
+ * True while `loadDayIntoPlanner` is mid-copy. Loading is several store
+ * writes in a row, and the subscription below fires on each; without the
+ * guard, the half-loaded states write back over the day they are being
+ * loaded from — the step after `setSelection` clears the pins, and that
+ * cleared map reached the shelf before `setPinnedTimes` restored it.
+ */
+let loading = false;
+
+export function loadDayIntoPlanner(trip: Trip, dayIndex: number): void {
+  const day = trip.days[dayIndex];
+  if (!day) return;
+  const planner = useTripStore.getState();
+  const shelf = useTripsStore.getState();
+
+  // Save the user's own anchor once, not per open: switching from Day 2 to
+  // Day 3 must not save Day 2's stay as though it were home.
+  if (shelf.savedPlanner === null) {
+    shelf.setSavedPlanner({
+      startPlace: planner.startPlace,
+      dayWindowSet: planner.dayWindowSet,
+    });
+  }
+  const saved = useTripsStore.getState().savedPlanner;
+
+  loading = true;
+  try {
+    const stay = stayForDay(trip, dayIndex);
+    if (stay) {
+      planner.setStartPlace(stay);
+    } else if (saved?.startPlace) {
+      // A stay-less day plans from the user's usual anchor — which may have
+      // been replaced by a previous day's stay, so it is put back.
+      planner.setStartPlace(saved.startPlace);
+    }
+    planner.setSelection(day.placeIds);
+    if (day.dayOrder) planner.setDayOrder(day.dayOrder);
+    else planner.clearDayOrder();
+    planner.setDayWindow(day.window);
+    planner.setGoal(day.goal);
+    // After setSelection, which clears pins; inside the window, which gives
+    // them meaning. Same ordering as link adoption, same reasons.
+    planner.setPinnedTimes(day.pinnedTimes);
+    shelf.setActiveDay({ tripId: trip.id, dayId: day.id });
+  } finally {
+    loading = false;
+  }
+  // One deliberate write-back now that the copy is whole, so the shelf and
+  // the planner agree from the first frame rather than after the next edit.
+  writeBack();
+}
+
+/**
+ * The trip lets go of the planner. The selection is cleared — leaving the
+ * day's places behind with the write-back disconnected would invite edits
+ * that silently reach nothing — and the user's own anchor and window flag
+ * come back.
+ */
+export function detachFromTrip(): void {
+  const shelf = useTripsStore.getState();
+  if (shelf.activeDay === null) return;
+  shelf.setActiveDay(null);
+  const planner = useTripStore.getState();
+  const saved = shelf.savedPlanner;
+  loading = true;
+  try {
+    planner.clearSelection();
+    if (saved) {
+      // Even when it is null: a user who never set an anchor must not come
+      // home from a trip owning its last hotel as one.
+      planner.setStartPlace(saved.startPlace);
+      useTripStore.setState({ dayWindowSet: saved.dayWindowSet });
+    }
+  } finally {
+    loading = false;
+  }
+  shelf.setSavedPlanner(null);
+}
+
+function writeBack(): void {
+  const shelf = useTripsStore.getState();
+  const ptr = shelf.activeDay;
+  if (!ptr || loading) return;
+  const trip = shelf.trips.find((t) => t.id === ptr.tripId);
+  const day = trip?.days.find((d) => d.id === ptr.dayId);
+  if (!trip || !day) {
+    // The day was deleted out from under the planner. Nothing to write to,
+    // and a dangling pointer would make the next edit look like it saved.
+    shelf.setActiveDay(null);
+    return;
+  }
+  const p = useTripStore.getState();
+  const next = dayFromPlanner(day, {
+    placeIds: p.selectedPlaceIds,
+    dayOrder: p.dayOrder,
+    pinnedTimes: p.pinnedTimes,
+    window: { dayStartMin: p.dayStartMin, homeByMin: p.homeByMin },
+    goal: p.goal,
+  });
+  // Stamping and Start day churn planner fields this mapping ignores; a
+  // write per churn would re-render every trips subscriber for nothing.
+  if (JSON.stringify(next) === JSON.stringify(day)) return;
+  shelf.updateDay(trip.id, next);
+}
+
+let installed = false;
+
+/**
+ * Installed once, at the root. The subscription outlives every screen
+ * because the day out it serves does: edits from Explore, Plan and Start day
+ * all pass through here whether or not any trip screen is mounted.
+ */
+export function installTripWriteBack(): void {
+  if (installed) return;
+  installed = true;
+  useTripStore.subscribe(() => writeBack());
+}
+
+

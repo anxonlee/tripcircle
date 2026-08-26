@@ -32,6 +32,17 @@ interface TripsState {
    * silently stop reaching the trip.
    */
   activeDay: { tripId: string; dayId: string } | null;
+  /**
+   * The user's own planner state, put aside while a trip borrows the
+   * planner and restored when it lets go. Persisted because the borrow is:
+   * a trip runs for days across many launches, and a saved anchor that died
+   * with the process would leave whoever relaunched mid-trip anchored to a
+   * hotel for good.
+   */
+  savedPlanner: { startPlace: StartPlace | null; dayWindowSet: boolean } | null;
+  setSavedPlanner: (
+    s: { startPlace: StartPlace | null; dayWindowSet: boolean } | null
+  ) => void;
   createTrip: (name: string) => Trip;
   renameTrip: (tripId: string, name: string) => void;
   deleteTrip: (tripId: string) => void;
@@ -70,6 +81,8 @@ export const useTripsStore = create<TripsState>()(
     (set, get) => ({
       trips: [],
       activeDay: null,
+      savedPlanner: null,
+      setSavedPlanner: (savedPlanner) => set({ savedPlanner }),
       createTrip: (name) => {
         const trip = makeTrip(name.trim() || 'Trip');
         set((s) => ({ trips: [trip, ...s.trips] }));
@@ -157,6 +170,7 @@ export const useTripsStore = create<TripsState>()(
         // GPS anchor into a day.
         trips: s.trips,
         activeDay: s.activeDay,
+        savedPlanner: s.savedPlanner,
       }),
       onRehydrateStorage: () => () => {
         useTripsStore.setState({ hydrated: true });
