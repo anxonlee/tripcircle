@@ -36,6 +36,18 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Setup'>;
  */
 export function SetupScreen({ navigation }: Props) {
   const setStartPlace = useTripStore((s) => s.setStartPlace);
+  /**
+   * Coming back to this screen having lost an anchor we promised not to
+   * keep, rather than arriving at it for the first time.
+   *
+   * The day itself is untouched — the places, their order and any pinned
+   * times are all still stored — so the screen should say that. Landing on
+   * cold onboarding after a hand-off to Google Maps reads as the app having
+   * forgotten the whole afternoon.
+   */
+  const anchorWasEphemeral = useTripStore((s) => s.anchorWasEphemeral);
+  const dayIsWaiting = useTripStore((s) => s.selectedPlaceIds.length > 0);
+  const resuming = anchorWasEphemeral && dayIsWaiting;
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Landmark[]>([]);
   const [here, setHere] = useState<LatLng | null>(null);
@@ -99,10 +111,13 @@ export function SetupScreen({ navigation }: Props) {
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
-        <Text style={styles.title}>Where does your day start?</Text>
+        <Text style={styles.title}>
+          {resuming ? 'Where are you now?' : 'Where does your day start?'}
+        </Text>
         <Text style={styles.subtitle}>
-          Pick a public landmark near you — a station or a plaza. PIRT
-          never asks for your exact address.
+          {resuming
+            ? 'Your day is still here — the places, their order and any times you set. You started from where you were, and we did not save that, so it needs setting again.'
+            : 'Pick a public landmark near you — a station or a plaza. PIRT never asks for your exact address.'}
         </Text>
         <View style={styles.inputWrap}>
           <MaterialCommunityIcons name="magnify" size={18} color={colors.textMuted} />

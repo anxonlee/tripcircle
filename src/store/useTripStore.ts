@@ -22,6 +22,17 @@ interface TripState {
    * never be written to storage. Enforced in `partialize` below.
    */
   startPlaceEphemeral: boolean;
+  /**
+   * Whether the anchor that is now missing was an ephemeral one.
+   *
+   * Persisted, and it holds no location — only the fact that there was one
+   * and that we deliberately did not keep it. Without this, a cold start
+   * cannot tell "never set one up" from "set one up, and we threw it away
+   * as promised", and those want completely different screens: the first is
+   * onboarding, the second is somebody halfway through a day out who has
+   * just come back from Google Maps.
+   */
+  anchorWasEphemeral: boolean;
   selectedPlaceIds: string[];
   goal: Goal;
   /**
@@ -136,6 +147,7 @@ export const useTripStore = create<TripState>()(
     (set) => ({
       startPlace: null,
       startPlaceEphemeral: false,
+      anchorWasEphemeral: false,
       selectedPlaceIds: [],
       goal: 'balanced',
       dayStartMin: 9 * 60,
@@ -143,7 +155,13 @@ export const useTripStore = create<TripState>()(
       hasCar: null,
       setHasCar: (v) => set({ hasCar: v }),
       setStartPlace: (sp, opts) =>
-        set({ startPlace: sp, startPlaceEphemeral: opts?.ephemeral ?? false }),
+        set({
+          startPlace: sp,
+          startPlaceEphemeral: opts?.ephemeral ?? false,
+          // Cleared by a durable anchor, so the explanation stops appearing
+          // once there is nothing left to explain.
+          anchorWasEphemeral: sp !== null && (opts?.ephemeral ?? false),
+        }),
       togglePlace: (id) =>
         set((s) => {
           const removing = s.selectedPlaceIds.includes(id);
@@ -191,6 +209,9 @@ export const useTripStore = create<TripState>()(
       partialize: (s) => ({
         // Ephemeral GPS anchors are never persisted (PRD §3.1).
         startPlace: s.startPlaceEphemeral ? null : s.startPlace,
+        // The flag, never the fix. Storing the coarse location instead would
+        // be the easy repair and is exactly what §3.1 forbids.
+        anchorWasEphemeral: s.anchorWasEphemeral,
         selectedPlaceIds: s.selectedPlaceIds,
         goal: s.goal,
         dayStartMin: s.dayStartMin,
