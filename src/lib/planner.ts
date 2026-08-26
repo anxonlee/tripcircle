@@ -484,6 +484,34 @@ export function clampDayWindow(window: DayWindow): DayWindow {
   return { dayStartMin, homeByMin };
 }
 
+/**
+ * The step the day window's controls move in, and the grid a default start
+ * is put on. A default of 14:07 is not more truthful than 14:15 — it is the
+ * same answer with a false precision, and it sits off the grid every button
+ * on that control moves in.
+ */
+export const DAY_START_STEP_MIN = 15;
+
+/**
+ * Where the day starts when the user has never said.
+ *
+ * "Not before now", rounded up to the next step. A fixed nine in the morning
+ * is right once a day and wrong the rest of it: opening the app at two in the
+ * afternoon offered a day that had left five hours earlier, with every stop
+ * timed against a departure that could not happen.
+ *
+ * Rounded *up*, so the answer is never a time already gone. The clamp is the
+ * same one `clampDayWindow` applies, repeated here so the value is legal
+ * before anything stores it: late enough at night and there is no day left to
+ * start, and the honest answer is the latest one that fits rather than
+ * tomorrow — this window describes today.
+ */
+export function defaultDayStartMin(now: Date): number {
+  const minutes = now.getHours() * 60 + now.getMinutes();
+  const stepped = Math.ceil(minutes / DAY_START_STEP_MIN) * DAY_START_STEP_MIN;
+  return Math.min(stepped, LATEST_HOME_BY_MIN - MIN_DAY_WINDOW_MIN);
+}
+
 /** Fewest stops worth calling a day out. A one-stop day is an errand. */
 export const MIN_STOPS = 2;
 /**

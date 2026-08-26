@@ -3,7 +3,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { AppState, StyleSheet, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
@@ -150,6 +150,22 @@ export default function App() {
     frame. The hook waits for the store itself rather than for this screen.
   */
   useSharedDayLink();
+
+  /*
+   * An untouched day window starts at "not before now", and coming back to
+   * the app hours later is exactly when that has gone stale — the plan on
+   * screen would still be offering the morning you last opened it.
+   *
+   * On foreground rather than on a timer: a start time creeping forward
+   * while the plan is being read would re-solve the day under the user's
+   * thumb. Does nothing once the user has set a window of their own.
+   */
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') useTripStore.getState().refreshDayStart();
+    });
+    return () => sub.remove();
+  }, []);
 
   /*
    * Starts the session listener once, at the root, rather than when the

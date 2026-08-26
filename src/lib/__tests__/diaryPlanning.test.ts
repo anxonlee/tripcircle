@@ -5,6 +5,7 @@ import {
   LATEST_HOME_BY_MIN,
   MIN_DAY_WINDOW_MIN,
   clampDayWindow,
+  defaultDayStartMin,
   MAX_OUTING_MINUTES,
   MAX_STOPS,
   MIN_STOPS,
@@ -608,6 +609,38 @@ describe('the latest a day may end', () => {
       homeByMin: LATEST_HOME_BY_MIN,
     });
     expect(toLatest).toBe(toMidnight);
+  });
+});
+
+describe('the day window a user has not set', () => {
+  const at = (h: number, m: number) => new Date(2026, 7, 25, h, m);
+
+  it('starts at now rather than a fixed morning', () => {
+    expect(defaultDayStartMin(at(14, 0))).toBe(14 * 60);
+  });
+
+  it('rounds up, so the default is never a time already gone', () => {
+    expect(defaultDayStartMin(at(14, 1))).toBe(14 * 60 + 15);
+    expect(defaultDayStartMin(at(14, 14))).toBe(14 * 60 + 15);
+    expect(defaultDayStartMin(at(14, 15))).toBe(14 * 60 + 15);
+  });
+
+  it('offers the latest window that still fits, late at night', () => {
+    // Not tomorrow morning: this window describes today, and the screens
+    // that cannot make a day out of what is left say so themselves.
+    const latest = LATEST_HOME_BY_MIN - MIN_DAY_WINDOW_MIN;
+    expect(defaultDayStartMin(at(23, 40))).toBe(latest);
+    expect(defaultDayStartMin(at(23, 59))).toBe(latest);
+  });
+
+  it('is a legal window on its own', () => {
+    for (const h of [0, 9, 14, 23]) {
+      const dayStartMin = defaultDayStartMin(at(h, 7));
+      expect(clampDayWindow({ dayStartMin, homeByMin: LATEST_HOME_BY_MIN })).toEqual({
+        dayStartMin,
+        homeByMin: LATEST_HOME_BY_MIN,
+      });
+    }
   });
 });
 

@@ -6,6 +6,7 @@ import type { Goal } from '../lib/optimizer';
 import {
   LATEST_HOME_BY_MIN,
   clampDayWindow,
+  defaultDayStartMin,
   type DayWindow,
   type SuggestionBias,
 } from '../lib/planner';
@@ -39,7 +40,12 @@ interface TripState {
    * Day window, minutes since midnight. There is deliberately no budget
    * field: cost is reported by the planner, never enforced.
    *
-   * The default runs as late as the clock allows rather than to an invented
+   * `dayStartMin` defaults to now rather than to a fixed morning, and stays
+   * pinned to now until the user sets a window of their own — see
+   * `dayWindowSet`. It reads "not before", so the honest default is the
+   * earliest moment they could actually leave.
+   *
+   * `homeByMin` runs as late as the clock allows rather than to an invented
    * early finish. Opening hours are what should end a day, and the planner
    * bounds the outing by §3.3's eight hours, so the late window costs nothing.
    *
@@ -68,6 +74,30 @@ interface TripState {
    * window that ends before it starts or runs past 23:59.
    */
   setDayWindow: (window: DayWindow) => void;
+  /**
+   * Whether the user has ever set the window themselves.
+   *
+   * Until they have, `dayStartMin` is not a saved preference but a standing
+   * default of "not before now", refreshed by `refreshDayStart` below. The
+   * flag is what keeps the refresh from ever touching a window someone chose:
+   * without it there is no way to tell a stored 9:00 the user asked for from
+   * a stored 9:00 that is just yesterday's default sitting where it was left.
+   *
+   * Set by `setDayWindow`, which covers both ways a window is chosen
+   * deliberately: the control on the plan screen, and opening a shared day.
+   * The second is a choice too — the prompt names the hours before it is
+   * accepted, and refreshing them away on the next launch would quietly
+   * rewrite the day someone was handed.
+   *
+   * So it is one-way. Adopting a single shared day opts out of the default
+   * for good, and the way back is to set a window, which is the same way in.
+   */
+  dayWindowSet: boolean;
+  /**
+   * Move an untouched window's start to now. A no-op once the user has set
+   * one. Called when the app starts and whenever it comes back to the front.
+   */
+  refreshDayStart: (now?: Date) => void;
   /**
    * Whether suggestions lean towards places already in the diary or away from
    * them. Defaults to `familiar`, which is what the ranking did before the
@@ -181,7 +211,10 @@ export const useTripStore = create<TripState>()(
       anchorWasEphemeral: false,
       selectedPlaceIds: [],
       goal: 'balanced',
-      dayStartMin: 9 * 60,
+      // Evaluated at launch, so even the frame before storage answers offers
+      // today rather than a morning that has gone. `refreshDayStart` takes
+      // over from there.
+      dayStartMin: defaultDayStartMin(new Date()),
       homeByMin: LATEST_HOME_BY_MIN,
       hasCar: null,
       setHasCar: (v) => set({ hasCar: v }),
@@ -227,7 +260,23 @@ export const useTripStore = create<TripState>()(
           pinnedTimes: {},
         }),
       setGoal: (g) => set({ goal: g }),
-      setDayWindow: (window) => set(clampDayWindow(window)),
+      setDayWindow: (window) => set({ ...clampDayWindow(window), dayWindowSet: true }),
+      dayWindowSet: false,
+      /*
+       * On launch and on foreground rather than on a timer. A start time that
+       * crept forward while the plan was being read would re-solve the day
+       * under the user's thumb, and Start day re-anchors to the real clock
+       * anyway — this only decides what the *plan* offers when it is opened.
+       */
+      refreshDayStart: (now = new Date()) =>
+        set((s) =>
+          s.dayWindowSet
+            ? s
+            : clampDayWindow({
+                dayStartMin: defaultDayStartMin(now),
+                homeByMin: s.homeByMin,
+              })
+        ),
       suggestionBias: 'familiar',
       setSuggestionBias: (b) => set({ suggestionBias: b }),
       startDayStep: 0,
@@ -280,6 +329,7 @@ export const useTripStore = create<TripState>()(
         dayStartMin: s.dayStartMin,
         homeByMin: s.homeByMin,
         hasCar: s.hasCar,
+        dayWindowSet: s.dayWindowSet,
         suggestionBias: s.suggestionBias,
         startDayStep: s.startDayStep,
         dayStartedAt: s.dayStartedAt,
@@ -294,6 +344,10 @@ export const useTripStore = create<TripState>()(
        */
       onRehydrateStorage: () => () => {
         useTripStore.setState({ hydrated: true });
+        // After the flag has landed, never before: run any earlier and an
+        // untouched window would be refreshed against a `dayWindowSet` that
+        // is still its default false, overwriting the window the user set.
+        useTripStore.getState().refreshDayStart();
       },
     }
   )
