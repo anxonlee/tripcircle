@@ -289,11 +289,53 @@ export function PlanScreen({ showBack = false }: { showBack?: boolean } = {}) {
    */
   const pendingPage = useRef<number | null>(null);
 
+  /**
+   * Which page the pager is actually showing.
+   *
+   * The bar reads `goal`, the pager holds a scroll offset, and nothing has
+   * kept the two together except the gestures that move both at once. Every
+   * other way the goal changes left the pager where it was: opening a shared
+   * day set the goal from the link and the bar went with it, while the
+   * timeline underneath stayed on the objective that was already on screen —
+   * summary cells reading Economic over a day full of rideshare legs. The
+   * same happened at every cold start with a stored goal, which arrives a
+   * beat after the first render.
+   */
+  const shownPage = useRef(goalIndex);
+
+  /**
+   * Put the pager on the selected objective, without animating.
+   *
+   * Imperative rather than through `contentOffset`, and that is the whole
+   * reason this is safe: driving the prop is what caused the three-way race
+   * described above it. A scroll issued here moves the pager and nothing
+   * else — and it claims the settle it is about to cause, so the bar is not
+   * told about a page change it asked for.
+   */
+  const showGoalPage = useCallback(
+    (index: number) => {
+      if (index < 0) return;
+      shownPage.current = index;
+      pendingPage.current = index;
+      pagerRef.current?.scrollTo({ x: index * width, animated: false });
+    },
+    [width]
+  );
+
+  /*
+   * Only when they have actually drifted apart. A tap on the bar and a swipe
+   * both record the page they land on, so neither trips this.
+   */
+  useEffect(() => {
+    if (goalIndex !== shownPage.current) showGoalPage(goalIndex);
+  }, [goalIndex, showGoalPage]);
+
   /** Tap on the bar: set the goal and bring the pager along. */
   const selectGoal = useCallback(
     (next: Goal) => {
       const i = OBJECTIVES.findIndex((o) => o.goal === next);
       pendingPage.current = i;
+      shownPage.current = i;
       pagerRef.current?.scrollTo({ x: i * width, animated: true });
       setGoal(next);
     },
@@ -315,6 +357,7 @@ export function PlanScreen({ showBack = false }: { showBack?: boolean } = {}) {
         OBJECTIVES.length - 1,
         Math.max(0, Math.round(x / width))
       );
+      shownPage.current = i;
       if (pendingPage.current !== null && i === pendingPage.current) {
         pendingPage.current = null;
         return;
@@ -1019,6 +1062,14 @@ export function PlanScreen({ showBack = false }: { showBack?: boolean } = {}) {
             pagingEnabled
             showsHorizontalScrollIndicator={false}
             contentOffset={pagerMountOffset}
+            /*
+             * The pager does not exist until the day is solved, so the goal
+             * can already have moved on by the time it first lays out — and
+             * `contentOffset` is fixed at what the goal was on the screen's
+             * very first render. Sending it to the selected objective as it
+             * appears is what makes the mount case agree as well.
+             */
+            onLayout={() => showGoalPage(goalIndex)}
             onMomentumScrollEnd={(e) =>
               onPagerSettled(e.nativeEvent.contentOffset.x)
             }
