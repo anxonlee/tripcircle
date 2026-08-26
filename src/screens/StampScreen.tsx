@@ -226,6 +226,8 @@ export function StampScreen({ navigation, route }: Props) {
               value={query}
               onChangeText={setQuery}
               autoCorrect={false}
+              // As on Setup, which had one and settled the convention.
+              clearButtonMode="while-editing"
             />
           </View>
 

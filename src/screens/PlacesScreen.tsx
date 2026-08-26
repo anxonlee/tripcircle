@@ -294,6 +294,13 @@ export function PlacesScreen({ navigation }: Props) {
               placeholder="Search places"
               placeholderTextColor={colors.textMuted}
               autoCorrect={false}
+              /*
+                Every search field on the platform has one, and this one is
+                the only way back to the full list: with a query typed and a
+                category chosen the list can say "No places match", and the
+                way out was seven presses of backspace.
+              */
+              clearButtonMode="while-editing"
             />
           </View>
         </View>
