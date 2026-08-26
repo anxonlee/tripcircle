@@ -35,6 +35,33 @@ type Props = NativeStackScreenProps<RootStackParamList, 'StartDay'>;
  */
 
 /** Minutes since midnight, from the wall clock. */
+/**
+ * The way past a refusal.
+ *
+ * Quiet on purpose, and second in the reading order: the screen's job is
+ * still to say the day cannot be walked as planned, and this is the answer
+ * to somebody who has read that and meant it anyway. A button styled to
+ * compete with the explanation above it would be the app talking people
+ * into a day it has just told them not to take.
+ */
+function AnywayButton({ onPress }: { onPress: () => void }) {
+  return (
+    <Pressable
+      style={({ pressed }) => [styles.anyway, pressed && styles.anywayPressed]}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel="Run the day anyway, outside the window you set"
+    >
+      <MaterialCommunityIcons
+        name="play-outline"
+        size={15}
+        color={colors.textSecondary}
+      />
+      <Text style={styles.anywayText}>Run it anyway</Text>
+    </Pressable>
+  );
+}
+
 function nowMinutes(now: Date): number {
   return now.getHours() * 60 + now.getMinutes();
 }
@@ -67,6 +94,47 @@ export function StartDayScreen({ navigation }: Props) {
    * were reading it.
    */
   const [anchorMin] = useState(() => nowMinutes(new Date()));
+
+  /**
+   * The user has read a refusal and asked for the day anyway.
+   *
+   * Both refusals below are about honesty rather than safety: a day whose
+   * times have already happened is worse than no guidance, and a day where
+   * everywhere is shut is not guidance at all. Neither is a reason the app
+   * gets to have the last word — someone walking a route to see it, or
+   * heading out late on purpose, is not confused, and telling them to come
+   * back tomorrow is the app declining to do the one thing it is for.
+   *
+   * So the refusals stay, they just stop being the end of the road. Saying
+   * yes solves the day against the latest the clock allows instead of the
+   * window the user set this morning, and the stepper carries a standing
+   * notice saying so — the app has said its piece, and it keeps saying it
+   * rather than pretending the times are a promise.
+   *
+   * Read straight from the store rather than mirrored into local state, and
+   * that is not tidiness. Mirrored, the copy lands a render after
+   * rehydration does, and the effect below reads a `windowGone` computed
+   * from the stored window against a local override that has not caught up
+   * — so returning to a running day would end it, and take the step with it.
+   *
+   * Their day window itself is untouched. This says what one outing did, not
+   * what the user prefers, which is why every change to the selection clears
+   * it along with the rest of the day.
+   */
+  const dayStartedAt = useTripStore((st) => st.dayStartedAt);
+  const ignoresWindow = useTripStore((st) => st.dayIgnoresWindow);
+  const ignoreDayWindow = useTripStore((st) => st.ignoreDayWindow);
+  /*
+   * An override belongs to the outing that asked for it and to that
+   * calendar day. Checked rather than trusted, because the flag is
+   * persisted: left to stand on its own it would still be set at nine the
+   * next morning, quietly stretching a day window the user had not been
+   * asked about — which is the exact move the refusal exists to prevent.
+   */
+  const ignoreWindow =
+    ignoresWindow &&
+    dayStartedAt !== null &&
+    new Date(dayStartedAt).toDateString() === new Date().toDateString();
 
   /**
    * Resolved through the service rather than the seed list directly, so a
@@ -123,7 +191,14 @@ export function StartDayScreen({ navigation }: Props) {
       startPlace,
       places: orderedPlaces,
       dayStartMin: anchorMin,
-      homeByMin,
+      // Overridden, the day is solved against the last minute before
+      // midnight rather than a home-by that has already gone by.
+      //
+      // A target, not a ceiling — the optimiser reports lateness rather than
+      // refusing, so a day started at 22:38 finishes "by 1:21 next day" and
+      // says so. That is the honest answer to running a day this late, and
+      // clamping it would only hide the overrun.
+      homeByMin: ignoreWindow ? LATEST_HOME_BY_MIN : homeByMin,
       goal,
       // The same mode set the day was planned with. Guiding someone into a
       // driving leg they cannot take would be worse here than on the plan
@@ -147,6 +222,7 @@ export function StartDayScreen({ navigation }: Props) {
     legOptionsFn,
     anchorMin,
     homeByMin,
+    ignoreWindow,
     goal,
     hasCar,
     dayOrder,
@@ -165,14 +241,15 @@ export function StartDayScreen({ navigation }: Props) {
     Boolean(startPlace) &&
     selectedPlaces.length > 0 &&
     anchorMin <= LATEST_HOME_BY_MIN - MIN_DAY_WINDOW_MIN &&
-    anchorMin < homeByMin &&
+    (ignoreWindow || anchorMin < homeByMin) &&
     Boolean(plan) &&
     plan!.stops.length > 0 &&
     // Same test as the "everywhere is shut" refusal below, computed here
     // because hooks cannot live after an early return.
-    plan!.stops.some(
-      (st) => !st.place.openHours || st.beginMin < st.place.openHours.close
-    );
+    (ignoreWindow ||
+      plan!.stops.some(
+        (st) => !st.place.openHours || st.beginMin < st.place.openHours.close
+      ));
 
   /**
    * The window has gone by while the day was still marked as running —
@@ -181,7 +258,9 @@ export function StartDayScreen({ navigation }: Props) {
    * tells them.
    */
   const windowGone =
-    anchorMin > LATEST_HOME_BY_MIN - MIN_DAY_WINDOW_MIN || anchorMin >= homeByMin;
+    !ignoreWindow &&
+    (anchorMin > LATEST_HOME_BY_MIN - MIN_DAY_WINDOW_MIN ||
+      anchorMin >= homeByMin);
 
   useEffect(() => {
     if (willRun) beginDayOut();
@@ -214,11 +293,34 @@ export function StartDayScreen({ navigation }: Props) {
   }
 
   /**
-   * Too late for the day the user set. Re-anchoring can only move the start
-   * forward, so once now is past the window there is nothing honest to show —
-   * and silently stretching `homeByMin` would overrule a choice they made.
+   * Too late for any day at all: there is not `MIN_DAY_WINDOW_MIN` left
+   * before midnight. Nothing can be offered here, not even an override —
+   * the day would have to run into tomorrow, which is a different day.
    */
-  if (anchorMin > LATEST_HOME_BY_MIN - MIN_DAY_WINDOW_MIN || anchorMin >= homeByMin) {
+  if (anchorMin > LATEST_HOME_BY_MIN - MIN_DAY_WINDOW_MIN) {
+    return (
+      <Shell insets={insets} title="Start day" onClose={() => navigation.goBack()}>
+        <View style={styles.center}>
+          <Text style={styles.emptyTitle}>There is no day left</Text>
+          <Text style={styles.emptyText}>
+            It is {formatTime(anchorMin)}, and a day has to finish before
+            midnight. The places are still chosen — start this one tomorrow.
+          </Text>
+        </View>
+      </Shell>
+    );
+  }
+
+  /**
+   * Past the window the user set. Re-anchoring can only move the start
+   * forward, and silently stretching `homeByMin` would overrule a choice they
+   * made — so the day is refused rather than quietly rescheduled.
+   *
+   * Refused, but not forbidden. Overruling their window without asking and
+   * refusing to run when they ask are two different things, and only the
+   * first is the app deciding for them.
+   */
+  if (anchorMin >= homeByMin && !ignoreWindow) {
     return (
       <Shell insets={insets} title="Start day" onClose={() => navigation.goBack()}>
         <View style={styles.center}>
@@ -228,6 +330,7 @@ export function StartDayScreen({ navigation }: Props) {
             {formatTime(homeByMin)}. Widen the window on the plan screen, or
             start this day tomorrow — the places are still chosen.
           </Text>
+          <AnywayButton onPress={ignoreDayWindow} />
         </View>
       </Shell>
     );
@@ -256,7 +359,7 @@ export function StartDayScreen({ navigation }: Props) {
   const reachable = plan.stops.filter(
     (s) => !s.place.openHours || s.beginMin < s.place.openHours.close
   );
-  if (plan.stops.length > 0 && reachable.length === 0) {
+  if (plan.stops.length > 0 && reachable.length === 0 && !ignoreWindow) {
     return (
       <Shell insets={insets} title="Start day" onClose={() => navigation.goBack()}>
         <View style={styles.center}>
@@ -266,6 +369,7 @@ export function StartDayScreen({ navigation }: Props) {
             closed by the time you would arrive. The places are still chosen —
             start the day earlier tomorrow.
           </Text>
+          <AnywayButton onPress={ignoreDayWindow} />
         </View>
       </Shell>
     );
@@ -281,6 +385,29 @@ export function StartDayScreen({ navigation }: Props) {
       title={done ? 'Day complete' : `Stop ${step + 1} of ${total}`}
       onClose={() => navigation.goBack()}
     >
+      {/*
+        The refusal, kept on screen rather than dismissed by the override.
+        Someone who asked for a day outside its window still needs to know
+        which parts of it are fiction, and a warning that appears once and
+        goes is a warning you are not reading when it matters.
+      */}
+      {ignoreWindow && (
+        <View style={styles.overrideNotice}>
+          <MaterialCommunityIcons
+            name="alert-outline"
+            size={14}
+            color={colors.warning}
+          />
+          <Text style={styles.overrideNoticeText}>
+            {anchorMin >= homeByMin
+              ? `Running past your ${formatTime(homeByMin)} finish. `
+              : ''}
+            Times are worked out from now, and some of these places will
+            already be shut.
+          </Text>
+        </View>
+      )}
+
       <View style={styles.progressTrack}>
         <View
           style={[
@@ -568,6 +695,36 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   primaryText: { fontSize: 14, fontWeight: '500', color: '#FFFFFF' },
+  anyway: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    height: 42,
+    borderRadius: 13,
+    paddingHorizontal: 18,
+    backgroundColor: colors.surfaceAlt,
+  },
+  anywayPressed: { opacity: 0.6 },
+  anywayText: { fontSize: 14, fontWeight: '500', color: colors.textSecondary },
+  /**
+   * Above the progress bar rather than in the scrolling body, so it cannot be
+   * scrolled away from — it is a caveat on the whole day, not on one stop.
+   */
+  overrideNotice: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 10,
+  },
+  overrideNoticeText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.warning,
+  },
   navRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
   navBtn: {
     flexDirection: 'row',
