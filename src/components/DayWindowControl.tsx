@@ -1,6 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { formatDuration } from '../lib/format';
 import { formatTime } from '../lib/geo';
 import {
   LATEST_HOME_BY_MIN,
@@ -125,14 +126,6 @@ export function DayWindowControl({
       </Modal>
     </>
   );
-}
-
-/** "6 h 45 min" — the window's length, not a plan duration. */
-function formatDuration(minutes: number): string {
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  if (h === 0) return `${m} min`;
-  return m === 0 ? `${h} h` : `${h} h ${m} min`;
 }
 
 const styles = StyleSheet.create({

@@ -586,7 +586,7 @@ export function PlanScreen({ showBack = false }: { showBack?: boolean } = {}) {
                   ? `${formatPlacePrice(s.place)} · `
                   : ''}
                 {s.place.visitDurationMin} min visit
-                {s.waitMin >= 15 ? ` · wait ${s.waitMin} min` : ''}
+                {s.waitMin >= 15 ? ` · wait ${formatDuration(s.waitMin)}` : ''}
               </Text>
               {s.warnings.map((w, i) => (
                 <View key={i} style={styles.warningRow}>

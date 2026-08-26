@@ -491,7 +491,7 @@ export function StartDayScreen({ navigation }: Props) {
                   {current.place.openHours
                     ? formatTime(current.place.openHours.open)
                     : ''}{' '}
-                  — {current.waitMin} min to wait
+                  — {formatDuration(current.waitMin)} to wait
                 </Text>
               )}
 

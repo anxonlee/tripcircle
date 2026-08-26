@@ -44,6 +44,14 @@ describe('formatDuration', () => {
     expect(formatDuration(59.7)).toBe('1 h');
     expect(formatDuration(119.6)).toBe('2 h');
   });
+
+  it('stays readable at the sizes the planner can produce', () => {
+    // Waits and overruns have no ceiling — Start day re-anchors to the real
+    // clock, so a day taken up late reported a pin "768 min later" than the
+    // time it was set for. Nobody converts that in their head.
+    expect(formatDuration(768)).toBe('12 h 48 min');
+    expect(formatDuration(410)).toBe('6 h 50 min');
+  });
 });
 
 describe('formatCount', () => {

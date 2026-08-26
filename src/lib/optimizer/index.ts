@@ -5,6 +5,7 @@ import type {
   StartPlace,
   TransportMode,
 } from '../../domain/types';
+import { formatDuration } from '../format';
 import { formatDayTime, formatTime } from '../geo';
 
 /**
@@ -423,7 +424,7 @@ function schedule(
     if (place.openHours && arriveMin < place.openHours.open) {
       openWaitMin = place.openHours.open - arriveMin;
       if (openWaitMin >= 15) {
-        warnings.push(`${place.name} ${usually(place)}opens at ${formatTime(place.openHours.open)} — ${openWaitMin} min wait`);
+        warnings.push(`${place.name} ${usually(place)}opens at ${formatTime(place.openHours.open)} — ${formatDuration(openWaitMin)} wait`);
       }
     }
     /**
@@ -446,7 +447,10 @@ function schedule(
     if (pinnedMin !== undefined && readyMin > pinnedMin) {
       pinLatenessMin += readyMin - pinnedMin;
       warnings.push(
-        `${readyMin - pinnedMin} min later than the ${formatTime(pinnedMin)} you set for ${place.name}`
+        // Through `formatDuration`, because this one has no ceiling: Start
+        // day re-anchors to the real clock, so a day taken up hours after it
+        // was planned reported "768 min later" — a number nobody converts.
+        `${formatDuration(readyMin - pinnedMin)} later than the ${formatTime(pinnedMin)} you set for ${place.name}`
       );
     }
     const waitMin = beginMin - arriveMin;
@@ -978,7 +982,7 @@ export function optimizeDay(rawInput: OptimizeInput): DayPlan {
   const warnings: string[] = sched.stops.flatMap((s) => s.warnings);
   if (sched.homeMin > input.homeByMin) {
     warnings.push(
-      `Home by ${formatDayTime(sched.homeMin)} — ${Math.round(sched.homeMin - input.homeByMin)} min past your ${formatTime(input.homeByMin)} target`
+      `Home by ${formatDayTime(sched.homeMin)} — ${formatDuration(sched.homeMin - input.homeByMin)} past your ${formatTime(input.homeByMin)} target`
     );
   }
 
@@ -1059,7 +1063,7 @@ export function optimizeDay(rawInput: OptimizeInput): DayPlan {
       ? ` ${pinned.place.name} ${usually(pinned.place)}opens at ${formatTime(pinned.place.openHours.open)}, so leaving earlier only adds waiting.`
       : '';
     warnings.push(
-      `Leaving at ${formatTime(dayStartMin)} rather than ${formatTime(input.dayStartMin)}, which saves ${later.savedWaitMin} min of waiting for the same places and the same finish.${opensAt}`
+      `Leaving at ${formatTime(dayStartMin)} rather than ${formatTime(input.dayStartMin)}, which saves ${formatDuration(later.savedWaitMin)} of waiting for the same places and the same finish.${opensAt}`
     );
   }
 
