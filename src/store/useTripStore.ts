@@ -100,6 +100,23 @@ interface TripState {
   beginDayOut: () => void;
   endDayOut: () => void;
   /**
+   * Whether this day out was started outside the window the user set.
+   *
+   * Start day refuses a day whose window has gone by, and offers to run it
+   * anyway; this remembers that they said yes. Without it the answer would
+   * be forgotten the moment the screen unmounted, and coming back to a day
+   * already underway would meet the same refusal — which also resets the
+   * step, so an overridden day would lose its place every time the app was
+   * backgrounded.
+   *
+   * Persisted for the same reason the step is, and cleared by the same
+   * things: it describes one outing, not a preference. Nothing else in the
+   * app reads it as permission — the day window itself is untouched.
+   */
+  dayIgnoresWindow: boolean;
+  /** Say yes to a refused day. Starts the outing if it has not started. */
+  ignoreDayWindow: () => void;
+  /**
    * The order the user arranged, by place id (PRD F6, §3.4).
    *
    * `null` means they have not arranged one and the optimiser is free to
@@ -186,6 +203,7 @@ export const useTripStore = create<TripState>()(
               : [...s.selectedPlaceIds, id],
             startDayStep: 0,
             dayStartedAt: null,
+            dayIgnoresWindow: false,
             pinnedTimes: removing ? rest : s.pinnedTimes,
           };
         }),
@@ -197,6 +215,7 @@ export const useTripStore = create<TripState>()(
           selectedPlaceIds: ids,
           startDayStep: 0,
           dayStartedAt: null,
+          dayIgnoresWindow: false,
           pinnedTimes: {},
         }),
       clearSelection: () =>
@@ -204,6 +223,7 @@ export const useTripStore = create<TripState>()(
           selectedPlaceIds: [],
           startDayStep: 0,
           dayStartedAt: null,
+          dayIgnoresWindow: false,
           pinnedTimes: {},
         }),
       setGoal: (g) => set({ goal: g }),
@@ -218,7 +238,18 @@ export const useTripStore = create<TripState>()(
       // "since when" wrong.
       beginDayOut: () =>
         set((s) => (s.dayStartedAt === null ? { dayStartedAt: Date.now() } : s)),
-      endDayOut: () => set({ dayStartedAt: null, startDayStep: 0 }),
+      endDayOut: () =>
+        set({ dayStartedAt: null, startDayStep: 0, dayIgnoresWindow: false }),
+      dayIgnoresWindow: false,
+      // The flag and the clock travel together, so nothing can be left
+      // holding an override with no outing under it. Read back, the two are
+      // checked together as well: an override belongs to the day that asked
+      // for it, and it dies with that day.
+      ignoreDayWindow: () =>
+        set((s) => ({
+          dayIgnoresWindow: true,
+          dayStartedAt: s.dayStartedAt ?? Date.now(),
+        })),
       dayOrder: null,
       setDayOrder: (ids) => set({ dayOrder: ids }),
       clearDayOrder: () => set({ dayOrder: null }),
@@ -252,6 +283,7 @@ export const useTripStore = create<TripState>()(
         suggestionBias: s.suggestionBias,
         startDayStep: s.startDayStep,
         dayStartedAt: s.dayStartedAt,
+        dayIgnoresWindow: s.dayIgnoresWindow,
         dayOrder: s.dayOrder,
         pinnedTimes: s.pinnedTimes,
       }),
