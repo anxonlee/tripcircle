@@ -5,7 +5,7 @@ import type {
   StartPlace,
   TransportMode,
 } from '../../domain/types';
-import { formatDayEnd, formatTime } from '../geo';
+import { formatDayTime, formatTime } from '../geo';
 
 /**
  * "usually " when a place's hours are a category default rather than the
@@ -454,7 +454,10 @@ function schedule(
       if (beginMin >= place.openHours.close) {
         hardClosingViolations++;
         warnings.push(
-          `Arrives ${formatTime(beginMin)}, after ${place.name} ${usually(place)}closes (${formatTime(place.openHours.close)})`
+          // The arrival is the plan's own number and can run past midnight;
+          // the closing time is the world's and wraps. Two formatters, one
+          // sentence, and the difference is the point of both.
+          `Arrives ${formatDayTime(beginMin)}, after ${place.name} ${usually(place)}closes (${formatTime(place.openHours.close)})`
         );
       } else if (beginMin + place.visitDurationMin > place.openHours.close) {
         warnings.push(`${place.name} ${usually(place)}closes at ${formatTime(place.openHours.close)}, before the visit ends`);
@@ -975,7 +978,7 @@ export function optimizeDay(rawInput: OptimizeInput): DayPlan {
   const warnings: string[] = sched.stops.flatMap((s) => s.warnings);
   if (sched.homeMin > input.homeByMin) {
     warnings.push(
-      `Home by ${formatDayEnd(sched.homeMin)} — ${Math.round(sched.homeMin - input.homeByMin)} min past your ${formatTime(input.homeByMin)} target`
+      `Home by ${formatDayTime(sched.homeMin)} — ${Math.round(sched.homeMin - input.homeByMin)} min past your ${formatTime(input.homeByMin)} target`
     );
   }
 

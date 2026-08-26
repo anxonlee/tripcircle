@@ -20,7 +20,7 @@ import {
   rankPlaces,
   suggestDay,
 } from '../planner';
-import { formatDayEnd, formatTime, haversineKm } from '../geo';
+import { formatDayTime, formatTime, haversineKm } from '../geo';
 import { findOverdue, startOfWeek, summarizeWeek } from '../summary';
 import { fitTransform, layoutWall, CARD_W } from '../wallLayout';
 import { buildWallCards } from '../../domain/diary';
@@ -577,16 +577,16 @@ describe('a day that runs past midnight', () => {
     // 24:16 rendered as "0:16" is a quarter past midnight this morning —
     // sixteen hours before the day it belongs to. Observed on a real plan.
     expect(formatTime(24 * 60 + 16)).toBe('0:16');
-    expect(formatDayEnd(24 * 60 + 16)).toBe('0:16 next day');
+    expect(formatDayTime(24 * 60 + 16)).toBe('0:16 next day');
   });
 
   it('leaves a time inside the day alone', () => {
-    expect(formatDayEnd(21 * 60)).toBe('21:00');
-    expect(formatDayEnd(LATEST_HOME_BY_MIN)).toBe('23:59');
+    expect(formatDayTime(21 * 60)).toBe('21:00');
+    expect(formatDayTime(LATEST_HOME_BY_MIN)).toBe('23:59');
   });
 
   it('treats midnight itself as the next day', () => {
-    expect(formatDayEnd(24 * 60)).toBe('0:00 next day');
+    expect(formatDayTime(24 * 60)).toBe('0:00 next day');
   });
 });
 

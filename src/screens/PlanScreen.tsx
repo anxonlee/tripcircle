@@ -25,7 +25,7 @@ import { ReorderableStack } from '../components/ReorderableStack';
 import { categoryIcon, transportIcon, transportLabel } from '../components/icons';
 import { TimelineNode } from '../components/IconTile';
 import type { CuratedPlace, TransportMode } from '../domain/types';
-import { formatDayEnd, formatTime } from '../lib/geo';
+import { formatDayTime, formatTime, isNextDay } from '../lib/geo';
 import {
   formatDayTotal,
   formatDuration,
@@ -617,12 +617,21 @@ export function PlanScreen({ showBack = false }: { showBack?: boolean } = {}) {
                 accessibilityRole="button"
                 accessibilityLabel={
                   s.pinnedMin === undefined
-                    ? `Arrives ${formatTime(s.arriveMin)}. Tap to fix a time for ${s.place.name}.`
+                    ? `Arrives ${formatDayTime(s.arriveMin)}. Tap to fix a time for ${s.place.name}.`
                     : `${s.place.name} pinned to ${formatTime(s.pinnedMin)}. Tap to change it.`
                 }
                 style={styles.timeTap}
               >
                 <Text style={styles.stopTime}>{formatTime(s.arriveMin)}</Text>
+                {/*
+                  The words go on their own line rather than beside the time,
+                  which has a column two digits and a colon wide. Same column
+                  the pin chip uses, and for the same reason: the tail cannot
+                  grow without pushing every stop's name sideways.
+                */}
+                {isNextDay(s.arriveMin) && (
+                  <Text style={styles.nextDay}>next day</Text>
+                )}
                 {/*
                   The pin sits under the arrival rather than replacing it.
                   They are different facts once a pin is held — you get there
@@ -733,7 +742,7 @@ export function PlanScreen({ showBack = false }: { showBack?: boolean } = {}) {
             <View style={styles.gutter}>
               <StartPin size={30} />
             </View>
-            <Text style={styles.anchorText}>Home by {formatDayEnd(p.homeMin)}</Text>
+            <Text style={styles.anchorText}>Home by {formatDayTime(p.homeMin)}</Text>
           </View>
         </>
       )}
@@ -1006,7 +1015,7 @@ export function PlanScreen({ showBack = false }: { showBack?: boolean } = {}) {
               value={formatDayTotal(plan.totals.totalUsd)}
             />
             <SummaryCell label="Travel" value={formatDuration(plan.totals.travelMin)} />
-            <SummaryCell label="Home by" value={formatDayEnd(plan.homeMin)} />
+            <SummaryCell label="Home by" value={formatDayTime(plan.homeMin)} />
           </View>
           {/*
             The two things to do with a finished plan: walk it, or hand it to
@@ -1532,6 +1541,7 @@ const styles = StyleSheet.create({
   stopName: { fontSize: 14, fontWeight: '500', color: colors.textPrimary },
   stopCost: { fontSize: 11, color: colors.textMuted, marginTop: 2 },
   stopTime: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  nextDay: { fontSize: 10, fontWeight: '500', color: colors.warning },
   /** Column so a held time can sit under the arrival without widening the tail. */
   timeTap: { alignItems: 'flex-end', gap: 2 },
   pinChip: {

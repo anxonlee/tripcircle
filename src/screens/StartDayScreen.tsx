@@ -7,7 +7,7 @@ import { CategoryPin, PIN_ANCHOR, PinSlot, StartPin } from '../components/Catego
 import { transportIcon, transportLabel } from '../components/icons';
 import { aggregateAll } from '../domain/diary';
 import type { CuratedPlace } from '../domain/types';
-import { formatDayEnd, formatTime } from '../lib/geo';
+import { formatDayTime, formatTime } from '../lib/geo';
 import { formatDuration, formatUsd, formatPlacePrice } from '../lib/format';
 import { googleMapsStopUrl } from '../lib/maps';
 import { optimizeDay, withAvailableModes, type DayPlan } from '../lib/optimizer';
@@ -429,7 +429,7 @@ export function StartDayScreen({ navigation }: Props) {
             {formatUsd(plan.totals.totalUsd)} in fares
           </Text>
           <Text style={styles.emptyText}>
-            Back at {startPlace.name} by {formatDayEnd(plan.homeMin)}
+            Back at {startPlace.name} by {formatDayTime(plan.homeMin)}
           </Text>
           <Pressable
             style={styles.primary}
@@ -473,7 +473,7 @@ export function StartDayScreen({ navigation }: Props) {
                 <View style={styles.cardText}>
                   <Text style={styles.stopName}>{current.place.name}</Text>
                   <Text style={styles.stopMeta}>
-                    Arrive {formatTime(current.arriveMin)} ·{' '}
+                    Arrive {formatDayTime(current.arriveMin)} ·{' '}
                     {current.place.visitDurationMin} min
                     {formatPlacePrice(current.place)
                       ? ` · ${formatPlacePrice(current.place)}`

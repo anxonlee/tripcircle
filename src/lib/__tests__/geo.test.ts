@@ -1,5 +1,6 @@
 import {
-  formatDayEnd,
+  formatDayTime,
+  isNextDay,
   formatTime,
   haversineKm,
   makeStartPlace,
@@ -101,13 +102,21 @@ describe('formatTime', () => {
   });
 });
 
-describe('formatDayEnd', () => {
+describe('isNextDay', () => {
+  it('is the same threshold formatDayTime uses', () => {
+    expect(isNextDay(1439)).toBe(false);
+    expect(isNextDay(1440)).toBe(true);
+    expect(isNextDay(1456)).toBe(true);
+  });
+});
+
+describe('formatDayTime', () => {
   it('says so when a day runs past midnight', () => {
-    expect(formatDayEnd(1456)).toBe('0:16 next day');
-    expect(formatDayEnd(1200)).toBe('20:00');
+    expect(formatDayTime(1456)).toBe('0:16 next day');
+    expect(formatDayTime(1200)).toBe('20:00');
   });
 
   it('treats exactly midnight as the next day', () => {
-    expect(formatDayEnd(1440)).toBe('0:00 next day');
+    expect(formatDayTime(1440)).toBe('0:00 next day');
   });
 });
