@@ -324,13 +324,20 @@ export function TripScreen({ navigation, route }: Props) {
                 </Text>
               </Pressable>
 
+              {/*
+                The order the day is actually walked in, not the order the
+                places were picked. `shareTrip` already resolves it this way
+                and so does the planner; leaving the card on the raw
+                selection made it contradict both — you arrange a day, come
+                back here, and the card lists it the old way round.
+              */}
               {day.placeIds.length === 0 ? (
                 <Text style={styles.emptyDay}>
                   Nothing here yet — plan the day and pick places in Explore.
                 </Text>
               ) : (
                 <View style={styles.chips}>
-                  {day.placeIds.map((pid) => (
+                  {(day.dayOrder ?? day.placeIds).map((pid) => (
                     <Pressable
                       key={pid}
                       style={styles.chip}
