@@ -162,12 +162,34 @@ function removePlaceFromDay(day: TripDay, placeId: string): TripDay {
 }
 
 /**
+ * Whether the planner and the day already say the same thing.
+ *
+ * The one comparison both directions of the bridge depend on: the
+ * write-back skips when this is true, and the shelf-to-planner sync
+ * reloads when it is false. Comparing through `dayFromPlanner` rather than
+ * field by field is what keeps the two directions from disagreeing about
+ * what counts as a difference — a mismatch there would either write on
+ * every keystroke or reload in a loop.
+ */
+export function plannerMatchesDay(
+  day: TripDay,
+  s: {
+    placeIds: string[];
+    dayOrder: string[] | null;
+    pinnedTimes: Record<string, number>;
+    window: DayWindow;
+    goal: Goal;
+  }
+): boolean {
+  return JSON.stringify(dayFromPlanner(day, s)) === JSON.stringify(day);
+}
+
+/**
  * Take the single-day store's state back into a trip day. The one door
  * through which the planner's edits return, so it is the one place the
- * invariants are enforced: the window is clamped, the order is either null
- * or a permutation-plus-additions the day recognises, and an ephemeral
- * anchor never lands in `stay` — the bridge passes the resolved stay out but
- * only a durable choice comes back.
+ * invariants are enforced: the window is clamped, and an ephemeral anchor
+ * never lands in `stay` — the bridge passes the resolved stay out, but only
+ * a durable choice ever comes back.
  */
 export function dayFromPlanner(
   day: TripDay,

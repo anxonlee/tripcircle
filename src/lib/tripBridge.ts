@@ -1,4 +1,9 @@
-import { dayFromPlanner, stayForDay, type Trip } from '../domain/trip';
+import {
+  dayFromPlanner,
+  plannerMatchesDay,
+  stayForDay,
+  type Trip,
+} from '../domain/trip';
 import { useTripStore } from '../store/useTripStore';
 import { useTripsStore } from '../store/useTripsStore';
 
@@ -122,30 +127,72 @@ function writeBack(): void {
     return;
   }
   const p = useTripStore.getState();
-  const next = dayFromPlanner(day, {
+  const snapshot = {
+    placeIds: p.selectedPlaceIds,
+    dayOrder: p.dayOrder,
+    pinnedTimes: p.pinnedTimes,
+    window: { dayStartMin: p.dayStartMin, homeByMin: p.homeByMin },
+    goal: p.goal,
+  };
+  // Stamping and Start day churn planner fields this mapping ignores; a
+  // write per churn would re-render every trips subscriber for nothing.
+  if (plannerMatchesDay(day, snapshot)) return;
+  shelf.updateDay(trip.id, dayFromPlanner(day, snapshot));
+}
+
+/**
+ * The other direction, and it exists because leaving it out corrupted data.
+ *
+ * The write-back alone made the planner the only writer of the active day.
+ * But the trip screen can edit that same day — move a place to another day,
+ * remove one, change the stay or the window — and the planner never heard
+ * about it. Worse than a stale screen: the next planner edit wrote its
+ * unchanged selection straight back over the change. Observed moving La
+ * Taqueria from Day 1 to Day 2, then tapping an objective — the move was
+ * undone on Day 1 and kept on Day 2, so one place sat on both days.
+ *
+ * So a shelf-side change to the active day is reloaded into the planner.
+ * The shelf wins here, and that is the right way round: the planner's own
+ * edits have already been written back by the time this runs, so any
+ * difference left is one the shelf introduced.
+ *
+ * It cannot ping-pong. A planner edit reconciles the two before this sees
+ * them, so the comparison finds them equal and does nothing; a shelf edit
+ * reloads once, after which the planner matches the day and the write-back
+ * finds nothing to write.
+ */
+function syncFromShelf(): void {
+  const shelf = useTripsStore.getState();
+  const ptr = shelf.activeDay;
+  if (!ptr || loading) return;
+  const trip = shelf.trips.find((t) => t.id === ptr.tripId);
+  const index = trip?.days.findIndex((d) => d.id === ptr.dayId) ?? -1;
+  const day = index >= 0 ? trip!.days[index] : undefined;
+  if (!trip || !day) return;
+  const p = useTripStore.getState();
+  const matches = plannerMatchesDay(day, {
     placeIds: p.selectedPlaceIds,
     dayOrder: p.dayOrder,
     pinnedTimes: p.pinnedTimes,
     window: { dayStartMin: p.dayStartMin, homeByMin: p.homeByMin },
     goal: p.goal,
   });
-  // Stamping and Start day churn planner fields this mapping ignores; a
-  // write per churn would re-render every trips subscriber for nothing.
-  if (JSON.stringify(next) === JSON.stringify(day)) return;
-  shelf.updateDay(trip.id, next);
+  if (matches) return;
+  loadDayIntoPlanner(trip, index);
 }
 
 let installed = false;
 
 /**
- * Installed once, at the root. The subscription outlives every screen
- * because the day out it serves does: edits from Explore, Plan and Start day
- * all pass through here whether or not any trip screen is mounted.
+ * Installed once, at the root. The subscriptions outlive every screen
+ * because the day out they serve does: edits from Explore, Plan and Start
+ * day all pass through here whether or not any trip screen is mounted.
  */
 export function installTripWriteBack(): void {
   if (installed) return;
   installed = true;
   useTripStore.subscribe(() => writeBack());
+  useTripsStore.subscribe(() => syncFromShelf());
 }
 
 

@@ -1,6 +1,7 @@
 import {
   DEFAULT_DAY_WINDOW,
   dayFromPlanner,
+  plannerMatchesDay,
   makeDay,
   makeTrip,
   movePlace,
@@ -153,6 +154,60 @@ describe('dayFromPlanner', () => {
     // Identity and stay survive the round trip untouched.
     expect(back.id).toBe(day.id);
     expect(back.stay).toBeNull();
+  });
+});
+
+describe('plannerMatchesDay', () => {
+  const snapshot = (over = {}) => ({
+    placeIds: ['a', 'b'],
+    dayOrder: null as string[] | null,
+    pinnedTimes: {} as Record<string, number>,
+    window: { dayStartMin: 540, homeByMin: 1200 },
+    goal: 'balanced' as const,
+    ...over,
+  });
+  const day = () => ({
+    ...makeDay(1_000),
+    placeIds: ['a', 'b'],
+    window: { dayStartMin: 540, homeByMin: 1200 },
+  });
+
+  it('is true when the two already agree', () => {
+    expect(plannerMatchesDay(day(), snapshot())).toBe(true);
+  });
+
+  it('notices a place the shelf moved away', () => {
+    // The bug this guards: a place moved to another day from the trip
+    // screen, while that day was the one open in the planner. Without a
+    // difference here the planner never reloaded, and its stale selection
+    // was written back over the move — leaving the place on both days.
+    expect(plannerMatchesDay(day(), snapshot({ placeIds: ['a'] }))).toBe(false);
+  });
+
+  it('notices an order, a pin, a window and a goal', () => {
+    expect(plannerMatchesDay(day(), snapshot({ dayOrder: ['b', 'a'] }))).toBe(false);
+    expect(plannerMatchesDay(day(), snapshot({ pinnedTimes: { a: 600 } }))).toBe(false);
+    expect(
+      plannerMatchesDay(day(), snapshot({ window: { dayStartMin: 600, homeByMin: 1200 } }))
+    ).toBe(false);
+    expect(plannerMatchesDay(day(), snapshot({ goal: 'fastest' }))).toBe(false);
+  });
+
+  it('ignores the stay, which the planner never sends back', () => {
+    // The planner holds a start place, but a trip day's stay is chosen on
+    // the trip screen. If this counted as a difference the two sides would
+    // reload each other forever.
+    const withStay = { ...day(), stay: stay('hotel') };
+    expect(plannerMatchesDay(withStay, snapshot())).toBe(true);
+  });
+
+  it('agrees with what dayFromPlanner would write', () => {
+    // The two must never disagree about what a difference is — that is what
+    // keeps the write-back and the reload from fighting.
+    const s = snapshot({ placeIds: ['a'] });
+    const d = day();
+    expect(plannerMatchesDay(d, s)).toBe(false);
+    expect(plannerMatchesDay(dayFromPlanner(d, s), s)).toBe(true);
   });
 });
 
