@@ -1474,7 +1474,19 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceAlt,
   },
   mapsBtnText: { fontSize: 14, fontWeight: '500', color: colors.textPrimary },
-  windowRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  /**
+   * Wraps, because the number of chips here is not fixed. The window is
+   * always present; "Your order" joins it once the day is arranged by hand,
+   * and the trip chip once the day belongs to a trip. Two fitted on one
+   * line and three did not — the third was simply clipped at the sheet's
+   * edge, which loses a control rather than moving it.
+   */
+  windowRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
   ownOrder: {
     flexDirection: 'row',
     alignItems: 'center',
