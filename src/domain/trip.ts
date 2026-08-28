@@ -121,6 +121,36 @@ export function withDay(trip: Trip, day: TripDay): Trip {
 }
 
 /**
+ * Replace one day, and take everything it now holds off every other day of
+ * the trip.
+ *
+ * The invariant: a place belongs to exactly one day of a trip. `movePlace`
+ * has always honoured that, but the bridge's write-back door replaces a day
+ * wholesale with whatever the planner is holding, and never used to look at
+ * that day's siblings — so a place could end up on two days at once and stay
+ * there. The sync in `tripBridge` closed the window that let it happen, but
+ * timing is not an invariant; this is.
+ *
+ * The other day loses its pin and its order slot too, for the same reasons
+ * `movePlace` drops them: a pin is about one place on one day, and an order
+ * is a statement about a day this place is no longer part of.
+ */
+export function withDayExclusive(trip: Trip, day: TripDay): Trip {
+  const next = withDay(trip, day);
+  if (next === trip) return trip;
+  const claimed = new Set(day.placeIds);
+  if (claimed.size === 0) return next;
+  const days = next.days.map((d) => {
+    if (d.id === day.id) return d;
+    const clash = d.placeIds.filter((id) => claimed.has(id));
+    return clash.length > 0 ? clash.reduce(removePlaceFromDay, d) : d;
+  });
+  // Reference equality when nothing clashed, so a plain edit does not churn
+  // every day of the trip through the store.
+  return days.some((d, i) => d !== next.days[i]) ? { ...next, days } : next;
+}
+
+/**
  * Move a place from one day to another, dropping its pin and its slot in any
  * hand-made order. The pin dies for the same reason `togglePlace` kills it
  * in the single-day store: a pin is about one place *on one day*, and

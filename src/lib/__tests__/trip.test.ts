@@ -7,6 +7,7 @@ import {
   movePlace,
   stayForDay,
   withDay,
+  withDayExclusive,
   type Trip,
 } from '../../domain/trip';
 import type { StartPlace } from '../../domain/types';
@@ -135,6 +136,77 @@ describe('withDay', () => {
     const changed = withDay(t, { ...t.days[1], placeIds: ['q'] });
     expect(changed.days[1].placeIds).toEqual(['q']);
     expect(withDay(t, { ...t.days[1], id: 'nope' })).toBe(t);
+  });
+});
+
+describe('withDayExclusive', () => {
+  function trip(): Trip {
+    const t = tripOfDays(3);
+    t.days[0] = { ...t.days[0], placeIds: ['a', 'b'] };
+    t.days[1] = {
+      ...t.days[1],
+      placeIds: ['b', 'c'],
+      dayOrder: ['c', 'b'],
+      pinnedTimes: { b: 780, c: 900 },
+    };
+    t.days[2] = { ...t.days[2], placeIds: ['d'] };
+    return t;
+  }
+
+  it('takes what the written day claims off every other day', () => {
+    // The invariant this exists for: after any write, no place is on two
+    // days of one trip. Day 3 claims b and d; day 1 and day 2 must let go.
+    const t = trip();
+    const out = withDayExclusive(t, { ...t.days[2], placeIds: ['d', 'b'] });
+    expect(out.days[0].placeIds).toEqual(['a']);
+    expect(out.days[1].placeIds).toEqual(['c']);
+    expect(out.days[2].placeIds).toEqual(['d', 'b']);
+  });
+
+  it('drops the loser\'s pin and order slot, not the whole arrangement', () => {
+    const t = trip();
+    const out = withDayExclusive(t, { ...t.days[2], placeIds: ['d', 'b'] });
+    expect(out.days[1].pinnedTimes).toEqual({ c: 900 });
+    expect(out.days[1].dayOrder).toEqual(['c']);
+  });
+
+  it('never strips the written day itself', () => {
+    // Its own places are what it is claiming — reading the claim as a clash
+    // would empty the day it was meant to fill.
+    const t = trip();
+    const day = { ...t.days[1], pinnedTimes: { b: 780, c: 900 } };
+    const out = withDayExclusive(t, day);
+    expect(out.days[1]).toEqual(day);
+  });
+
+  it('is withDay when nothing clashes, down to the reference', () => {
+    // A plain edit is the common case, and it must not churn every day of
+    // the trip through the store.
+    const t = trip();
+    const out = withDayExclusive(t, { ...t.days[2], placeIds: ['d', 'e'] });
+    expect(out.days[0]).toBe(t.days[0]);
+    expect(out.days[1]).toBe(t.days[1]);
+  });
+
+  it('handles a day emptied to nothing', () => {
+    const t = trip();
+    const out = withDayExclusive(t, { ...t.days[1], placeIds: [] });
+    expect(out.days[0].placeIds).toEqual(['a', 'b']);
+    expect(out.days[1].placeIds).toEqual([]);
+  });
+
+  it('ignores an unknown day rather than stripping the trip for it', () => {
+    const t = trip();
+    expect(withDayExclusive(t, { ...t.days[1], id: 'nope' })).toBe(t);
+  });
+
+  it('repairs a trip that already held a place twice', () => {
+    // The state the bug used to leave behind: b on day 1 and day 2 at once.
+    // Writing either day is now enough to settle it.
+    const t = trip();
+    const out = withDayExclusive(t, t.days[1]);
+    expect(out.days[0].placeIds).toEqual(['a']);
+    expect(out.days[1].placeIds).toEqual(['b', 'c']);
   });
 });
 

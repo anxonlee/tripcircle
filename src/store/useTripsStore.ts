@@ -7,6 +7,7 @@ import {
   makeTrip,
   movePlace,
   withDay,
+  withDayExclusive,
   type Trip,
   type TripDay,
 } from '../domain/trip';
@@ -78,7 +79,10 @@ interface TripsState {
     toDayId: string
   ) => void;
   removePlaceFromDay: (tripId: string, dayId: string, placeId: string) => void;
-  /** The bridge's write-back door. Replaces the day wholesale. */
+  /**
+   * The bridge's write-back door. Replaces the day wholesale, and takes what
+   * it now holds off the trip's other days — see `withDayExclusive`.
+   */
   updateDay: (tripId: string, day: TripDay) => void;
   setActiveDay: (ptr: { tripId: string; dayId: string } | null) => void;
   hydrated: boolean;
@@ -192,7 +196,7 @@ export const useTripsStore = create<TripsState>()(
         })),
       updateDay: (tripId, day) =>
         set((s) => ({
-          trips: mapTrip(s.trips, tripId, (t) => withDay(t, day)),
+          trips: mapTrip(s.trips, tripId, (t) => withDayExclusive(t, day)),
         })),
       setActiveDay: (ptr) => set({ activeDay: ptr }),
       hydrated: false,
