@@ -1,6 +1,7 @@
 import {
   DEFAULT_DAY_WINDOW,
   dayFromPlanner,
+  dayPlaceOrder,
   plannerMatchesDay,
   makeDay,
   makeTrip,
@@ -136,6 +137,39 @@ describe('withDay', () => {
     const changed = withDay(t, { ...t.days[1], placeIds: ['q'] });
     expect(changed.days[1].placeIds).toEqual(['q']);
     expect(withDay(t, { ...t.days[1], id: 'nope' })).toBe(t);
+  });
+});
+
+describe('dayPlaceOrder', () => {
+  const day = (over = {}) => ({ ...makeDay(1_000), placeIds: ['a', 'b'], ...over });
+
+  it('is the picked order when nothing was arranged', () => {
+    expect(dayPlaceOrder(day())).toEqual(['a', 'b']);
+  });
+
+  it('is the arrangement when it covers the selection', () => {
+    expect(dayPlaceOrder(day({ dayOrder: ['b', 'a'] }))).toEqual(['b', 'a']);
+  });
+
+  it('appends places added after the arrangement was made', () => {
+    // The bug this exists for: a day arranged by hand, then added to. The
+    // trip card read the order alone and quietly showed one place fewer
+    // than the day held — and the share link sent one fewer too.
+    const d = day({ placeIds: ['a', 'b', 'c'], dayOrder: ['b', 'a'] });
+    expect(dayPlaceOrder(d)).toEqual(['b', 'a', 'c']);
+  });
+
+  it('ignores an order entry for a place the day no longer holds', () => {
+    expect(dayPlaceOrder(day({ dayOrder: ['b', 'gone', 'a'] }))).toEqual(['b', 'a']);
+  });
+
+  it('never invents, drops or repeats a place', () => {
+    const d = day({ placeIds: ['a', 'b', 'c'], dayOrder: ['c', 'gone'] });
+    expect([...dayPlaceOrder(d)].sort()).toEqual(['a', 'b', 'c']);
+  });
+
+  it('is empty for an empty day, arrangement or not', () => {
+    expect(dayPlaceOrder(day({ placeIds: [], dayOrder: ['a'] }))).toEqual([]);
   });
 });
 

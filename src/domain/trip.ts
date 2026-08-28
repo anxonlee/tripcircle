@@ -121,6 +121,23 @@ export function withDay(trip: Trip, day: TripDay): Trip {
 }
 
 /**
+ * The order a day's places will actually be walked in.
+ *
+ * `dayOrder` is a hand arrangement, and it goes stale the moment the
+ * selection changes underneath it: places added afterwards are appended to
+ * `placeIds` and are simply not in it. Reading the order alone therefore
+ * loses them — which is what the Plan and Start day screens have always
+ * known, appending the unarranged remainder rather than trusting the order
+ * to be complete. This is that rule, in one place, for everyone who needs to
+ * show or send a day.
+ */
+export function dayPlaceOrder(day: TripDay): string[] {
+  if (!day.dayOrder) return day.placeIds;
+  const known = day.dayOrder.filter((id) => day.placeIds.includes(id));
+  return [...known, ...day.placeIds.filter((id) => !known.includes(id))];
+}
+
+/**
  * Replace one day, and take everything it now holds off every other day of
  * the trip.
  *

@@ -13,7 +13,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { stayForDay } from '../domain/trip';
+import { dayPlaceOrder, stayForDay } from '../domain/trip';
 import type { CuratedPlace, Landmark } from '../domain/types';
 import { formatTime, makeStartPlace } from '../lib/geo';
 import { detachFromTrip, loadDayIntoPlanner } from '../lib/tripBridge';
@@ -182,7 +182,7 @@ export function TripScreen({ navigation, route }: Props) {
       city: DATASET_CITY,
       name: trip.name,
       days: days.map((d) => ({
-        placeIds: d.dayOrder ?? d.placeIds,
+        placeIds: dayPlaceOrder(d),
         window: d.window,
         goal: d.goal,
         pinnedTimes: d.pinnedTimes,
@@ -337,7 +337,7 @@ export function TripScreen({ navigation, route }: Props) {
                 </Text>
               ) : (
                 <View style={styles.chips}>
-                  {(day.dayOrder ?? day.placeIds).map((pid) => (
+                  {dayPlaceOrder(day).map((pid) => (
                     <Pressable
                       key={pid}
                       style={styles.chip}
