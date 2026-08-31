@@ -344,10 +344,20 @@ export interface SharedTrip {
 /** Most days one link will carry. Past this it is an itinerary export, not a link. */
 export const MAX_LINK_DAYS = 14;
 
+/** Longest trip name a link carries, applied on both sides of the journey. */
+export const MAX_LINK_NAME = 60;
+
 export function encodeTripLink(trip: SharedTrip): string {
   const params = [`v=${TRIP_LINK_VERSION}`, `c=${trip.city}`];
-  const name = trip.name.trim();
-  if (name) params.push(`n=${encodeURIComponent(name).slice(0, 120)}`);
+  /**
+   * Trimmed to length BEFORE escaping, and to the same 60 characters the
+   * decoder keeps. Cutting the escaped form left "%E4%B" on the end of a
+   * long name, which `decodeURIComponent` throws on — and the receiver's
+   * catch turns a bad escape into no name at all, so a trip called anything
+   * long arrived as "Shared trip".
+   */
+  const name = trip.name.trim().slice(0, MAX_LINK_NAME);
+  if (name) params.push(`n=${encodeURIComponent(name)}`);
   // Empty days are skipped and the numbering closes over them: a shared
   // trip is its content, and "Day 3 (nothing)" is not content.
   const days = trip.days
@@ -416,7 +426,9 @@ export function decodeTripLink(url: string, known: Set<string>): TripDecodeResul
   let name = 'Shared trip';
   try {
     const rawName = params.get('n');
-    if (rawName) name = decodeURIComponent(rawName).slice(0, 60).trim() || name;
+    if (rawName) {
+      name = decodeURIComponent(rawName).slice(0, MAX_LINK_NAME).trim() || name;
+    }
   } catch {
     // A malformed escape is a bad name, not a bad trip.
   }

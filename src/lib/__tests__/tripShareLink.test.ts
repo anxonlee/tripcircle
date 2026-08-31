@@ -5,6 +5,7 @@ import {
   encodeTripLink,
   unresolvedTripCount,
   type SharedTrip,
+  MAX_LINK_NAME,
 } from '../tripLink';
 import { LATEST_HOME_BY_MIN } from '../planner';
 
@@ -128,6 +129,14 @@ describe('encodeTripLink / decodeTripLink', () => {
       KNOWN
     );
     expect(mangled.ok && mangled.trip.name).toBe('Shared trip');
+  });
+
+  it('carries a long name in escaped characters rather than losing it', () => {
+    // Cut after escaping, this ended in half a percent-escape, which the
+    // receiver's catch turned into no name at all.
+    const long = '東京'.repeat(40);
+    const out = decodeTripLink(encodeTripLink(trip({ name: long })), KNOWN);
+    expect(out.ok && out.trip.name).toBe(long.slice(0, MAX_LINK_NAME));
   });
 
   it('clamps a nonsense window instead of importing it', () => {

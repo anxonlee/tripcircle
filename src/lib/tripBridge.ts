@@ -50,18 +50,19 @@ export function loadDayIntoPlanner(trip: Trip, dayIndex: number): void {
   const planner = useTripStore.getState();
   const shelf = useTripsStore.getState();
 
-  // Save the user's own anchor once, not per open: switching from Day 2 to
-  // Day 3 must not save Day 2's stay as though it were home.
-  if (shelf.savedPlanner === null) {
-    shelf.setSavedPlanner({
-      startPlace: planner.startPlace,
-      dayWindowSet: planner.dayWindowSet,
-    });
-  }
-  const saved = useTripsStore.getState().savedPlanner;
-
   loading = true;
   try {
+    // Save the user's own anchor once, not per open: switching from Day 2 to
+    // Day 3 must not save Day 2's stay as though it were home. Inside the
+    // guard, because saving it is itself a shelf write, and `syncFromShelf`
+    // reads a set `savedPlanner` with no pointer as a borrow to undo.
+    if (shelf.savedPlanner === null) {
+      shelf.setSavedPlanner({
+        startPlace: planner.startPlace,
+        dayWindowSet: planner.dayWindowSet,
+      });
+    }
+    const saved = useTripsStore.getState().savedPlanner;
     const stay = stayForDay(trip, dayIndex);
     if (stay) {
       planner.setStartPlace(stay);
@@ -96,18 +97,45 @@ export function loadDayIntoPlanner(trip: Trip, dayIndex: number): void {
 export function detachFromTrip(): void {
   const shelf = useTripsStore.getState();
   if (shelf.activeDay === null) return;
-  shelf.setActiveDay(null);
-  const planner = useTripStore.getState();
+  // Guarded, so the shelf subscription does not race this to the same
+  // restore: dropping the pointer is exactly the signal `syncFromShelf`
+  // watches for.
+  loading = true;
+  try {
+    shelf.setActiveDay(null);
+  } finally {
+    loading = false;
+  }
+  restoreOwnPlanner();
+}
+
+/**
+ * Give the planner back to its owner: the day's places go, and the anchor
+ * and window flag saved when the trip borrowed it come back.
+ *
+ * Separate from `detachFromTrip` because letting go is not always the user
+ * saying so. The shelf drops the pointer on its own when the day being
+ * planned is removed, when its trip is deleted, and when the write-back
+ * finds the day gone — and each of those left the borrow standing: the
+ * planner kept the trip's places and, worse, kept a hotel installed as the
+ * start place every ordinary day afterwards was planned from.
+ *
+ * Safe to call with nothing saved, which is what makes it safe to hang off
+ * a subscription: with no `savedPlanner` there is no borrow, and the day's
+ * places are the user's own.
+ */
+function restoreOwnPlanner(): void {
+  const shelf = useTripsStore.getState();
   const saved = shelf.savedPlanner;
+  if (!saved) return;
+  const planner = useTripStore.getState();
   loading = true;
   try {
     planner.clearSelection();
-    if (saved) {
-      // Even when it is null: a user who never set an anchor must not come
-      // home from a trip owning its last hotel as one.
-      planner.setStartPlace(saved.startPlace);
-      useTripStore.setState({ dayWindowSet: saved.dayWindowSet });
-    }
+    // Even when the saved anchor is null: a user who never set one must not
+    // come home from a trip owning its last hotel as one.
+    planner.setStartPlace(saved.startPlace);
+    useTripStore.setState({ dayWindowSet: saved.dayWindowSet });
   } finally {
     loading = false;
   }
@@ -123,6 +151,8 @@ function writeBack(): void {
   if (!trip || !day) {
     // The day was deleted out from under the planner. Nothing to write to,
     // and a dangling pointer would make the next edit look like it saved.
+    // Clearing it hands the restore to `syncFromShelf`, the same way any
+    // other shelf-side drop of the pointer is handled.
     shelf.setActiveDay(null);
     return;
   }
@@ -164,7 +194,15 @@ function writeBack(): void {
 function syncFromShelf(): void {
   const shelf = useTripsStore.getState();
   const ptr = shelf.activeDay;
-  if (!ptr || loading) return;
+  if (loading) return;
+  if (!ptr) {
+    // The shelf let go without being asked: the day being planned was
+    // removed, or its trip was deleted. Undo the borrow here rather than in each of those
+    // actions — the trips store is not allowed to know the planner exists,
+    // and a path added later would otherwise leak the anchor again.
+    restoreOwnPlanner();
+    return;
+  }
   const trip = shelf.trips.find((t) => t.id === ptr.tripId);
   const index = trip?.days.findIndex((d) => d.id === ptr.dayId) ?? -1;
   const day = index >= 0 ? trip!.days[index] : undefined;
@@ -177,7 +215,25 @@ function syncFromShelf(): void {
     window: { dayStartMin: p.dayStartMin, homeByMin: p.homeByMin },
     goal: p.goal,
   });
-  if (matches) return;
+  /**
+   * The stay is compared separately because it is not part of the day the
+   * planner holds — it arrives as the planner's start place and nothing maps
+   * it back. So `plannerMatchesDay` cannot see it move, and choosing a stay
+   * for the day open in the Plan tab did nothing at all until it was next
+   * reopened: the card said the hotel, the route still ran from the old
+   * anchor, and neither screen admitted the disagreement.
+   *
+   * Resolved, not raw, so inheriting also counts: giving Day 1 a hotel moves
+   * where Day 2 starts, and Day 2 may be the one on the table.
+   *
+   * The comparison is skipped when nothing is expected, which is exactly
+   * when `loadDayIntoPlanner` leaves the start place alone — a stay-less day
+   * belonging to a user who has never set an anchor. Checking there would
+   * ask for a reload that changes nothing, forever.
+   */
+  const expected = stayForDay(trip, index) ?? shelf.savedPlanner?.startPlace ?? null;
+  const anchorMoved = expected !== null && p.startPlace?.id !== expected.id;
+  if (matches && !anchorMoved) return;
   loadDayIntoPlanner(trip, index);
 }
 
