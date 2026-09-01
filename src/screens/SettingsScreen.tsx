@@ -22,6 +22,7 @@ import { formatReport } from '../lib/crashReport';
 import { clearCrashLog, readCrashLog } from '../services/crashLog';
 import { exportDiary, importDiary } from '../services/diaryBackup';
 import { visibleMyPlaces, useMyPlacesStore } from '../store/useMyPlacesStore';
+import { useAuthStore } from '../store/useAuthStore';
 import { useDiaryStore } from '../store/useDiaryStore';
 import { useTripStore } from '../store/useTripStore';
 import { colors } from '../theme/colors';
@@ -70,6 +71,9 @@ export function SettingsScreen() {
   const selectedIds = useTripStore((s) => s.selectedPlaceIds);
   const togglePlace = useTripStore((s) => s.togglePlace);
   const hideMyPlace = useMyPlacesStore((s) => s.hide);
+  const authStatus = useAuthStore((s) => s.status);
+  const authEmail = useAuthStore((s) => s.session?.user.email ?? null);
+  const deleteAccount = useAuthStore((s) => s.deleteAccount);
   const [busy, setBusy] = useState(false);
   /**
    * How many problems are waiting to be sent. Counted on focus rather than
@@ -104,6 +108,43 @@ export function SettingsScreen() {
     // as a second crash.
     await clearCrashLog();
     setCrashes(0);
+  };
+
+  /**
+   * Two alerts, not one. The first is easy to hit by accident from a list of
+   * rows that mostly do small reversible things; the second names what goes
+   * and what stays. Nothing here can be undone, and there is no export to
+   * offer first — what the server holds is a display name, some lists and
+   * whatever was published, all of which the person can already see.
+   */
+  const onDeleteAccount = () => {
+    Alert.alert(
+      'Delete your account?',
+      'Your shared lists, published days and comments are deleted. Your diary stays on this phone — it was never uploaded.',
+      [
+        { text: 'Keep it', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () =>
+            Alert.alert('This cannot be undone', 'Delete the account and everything on the server?', [
+              { text: 'Keep it', style: 'cancel' },
+              {
+                text: 'Delete account',
+                style: 'destructive',
+                onPress: () => {
+                  void deleteAccount().catch((e) =>
+                    Alert.alert(
+                      'Could not delete the account',
+                      String(e instanceof Error ? e.message : e),
+                    ),
+                  );
+                },
+              },
+            ]),
+        },
+      ],
+    );
   };
 
   /**
@@ -258,6 +299,35 @@ export function SettingsScreen() {
           place, and your diary is never uploaded.
         </Text>
 
+        {/*
+          Only when there is an account to delete. A permanent row offering to
+          delete something that does not exist is a worse answer than no row,
+          and this app's normal state is signed out.
+        */}
+        {authStatus === 'signedIn' && (
+          <>
+            <Text style={styles.groupLabel}>Your account</Text>
+            <View style={styles.card}>
+              <Row
+                icon="email-outline"
+                label="Signed in as"
+                value={authEmail ?? '—'}
+                onPress={() => navigation.navigate('Wishlists')}
+              />
+              <Row
+                icon="delete-outline"
+                label="Delete account"
+                onPress={onDeleteAccount}
+                divided
+              />
+            </View>
+            <Text style={styles.groupNote}>
+              Deleting removes your shared lists, published days and comments
+              from the server. Your diary stays here on the phone.
+            </Text>
+          </>
+        )}
+
         <Text style={styles.groupLabel}>Your diary</Text>
         <View style={styles.card}>
           <Row
@@ -282,8 +352,9 @@ export function SettingsScreen() {
           />
         </View>
         <Text style={styles.groupNote}>
-          Saved on this device only. Until accounts arrive, a file you keep is
-          the only thing between you and losing the diary with the app.
+          Saved on this device only, and an account does not change that — the
+          diary is not uploaded, so signing in does not back it up. A file you
+          keep is the only thing between you and losing it with the app.
         </Text>
 
         {/*

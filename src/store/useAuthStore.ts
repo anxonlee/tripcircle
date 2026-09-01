@@ -29,6 +29,12 @@ interface AuthState {
   sendCode: (email: string) => Promise<void>;
   verifyCode: (email: string, code: string) => Promise<void>;
   signOut: () => Promise<void>;
+  /**
+   * Irreversible, and the app says so before calling it. Deletes the account
+   * and everything the server holds against it; the diary stays, because the
+   * diary was never on the server.
+   */
+  deleteAccount: () => Promise<void>;
   setDisplayName: (name: string) => Promise<void>;
 }
 
@@ -106,6 +112,18 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
   signOut: async () => {
     if (!supabase) return;
     await supabase.auth.signOut();
+    set({ session: null, status: 'signedOut', displayName: null });
+  },
+
+  deleteAccount: async () => {
+    if (!supabase) throw new Error('This build has no server configured.');
+    const { error } = await supabase.rpc('delete_own_account');
+    if (error) throw error;
+    // The row is gone; the token on this device is not, and a request
+    // carrying it would now fail in ways that read like a bug. Signing out
+    // is what makes the app agree with the server. It is allowed to fail —
+    // the session it would end no longer refers to anything.
+    await supabase.auth.signOut().catch(() => {});
     set({ session: null, status: 'signedOut', displayName: null });
   },
 
