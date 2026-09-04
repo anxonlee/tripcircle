@@ -201,5 +201,9 @@ code**, and attribution is required by the licence, not by courtesy.
 
 ## Licence
 
-Source code: see [LICENSE](LICENSE). The OpenStreetMap-derived place data is
-ODbL and is not covered by that licence — see the attribution note above.
+Source code is **[MIT](LICENSE)** — use it, change it, ship it, keep the
+notice.
+
+The OpenStreetMap-derived place data is **not** covered by that licence. It is
+ODbL, attribution is required, and share-alike applies if you redistribute the
+data or a modified version of it. See the attribution note above.
