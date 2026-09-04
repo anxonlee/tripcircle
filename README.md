@@ -206,4 +206,6 @@ notice.
 
 The OpenStreetMap-derived place data is **not** covered by that licence. It is
 ODbL, attribution is required, and share-alike applies if you redistribute the
-data or a modified version of it. See the attribution note above.
+data or a modified version of it. [NOTICE](NOTICE) states the separation, and
+the attribution above is required by the ODbL rather than offered as a
+courtesy.
