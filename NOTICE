@@ -1,0 +1,16 @@
+NOTICE — third-party data
+
+The MIT licence in LICENSE covers the source code of this repository only.
+It does not cover the place data.
+
+The Bay Area place records in src/services/mock/bayAreaPlaces.ts are derived
+from OpenStreetMap and are © OpenStreetMap contributors, available under the
+Open Database License (ODbL) v1.0:
+
+    https://opendatacommons.org/licenses/odbl/
+    https://www.openstreetmap.org/copyright
+
+The ODbL is a share-alike licence and applies to that data whatever LICENSE
+says about the code. If you redistribute the data, or a database derived from
+it, the ODbL's attribution and share-alike terms apply to what you
+redistribute. Attribution is required by the licence, not by courtesy.

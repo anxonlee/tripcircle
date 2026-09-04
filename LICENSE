@@ -19,21 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-NOTE ON THE PLACE DATA
-
-The licence above covers the source code only.
-
-The Bay Area place records in src/services/mock/bayAreaPlaces.ts are derived
-from OpenStreetMap and are © OpenStreetMap contributors, available under the
-Open Database License (ODbL) v1.0:
-
-    https://opendatacommons.org/licenses/odbl/
-    https://www.openstreetmap.org/copyright
-
-The ODbL is a share-alike licence and applies to that data whatever this file
-says about the code. If you redistribute the data, or a database derived from
-it, the ODbL's attribution and share-alike terms apply to what you
-redistribute. Attribution is required by the licence, not by courtesy.
