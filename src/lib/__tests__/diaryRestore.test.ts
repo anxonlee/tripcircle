@@ -27,23 +27,23 @@ const row = (over: Record<string, unknown> = {}) => ({
 
 describe('what it refuses', () => {
   it('rejects a file that is not JSON at all', () => {
-    expect(() => parseBackup('not json')).toThrow(/not a PIRT diary/);
+    expect(() => parseBackup('not json')).toThrow(/not a TripCircle diary/);
   });
 
   it('rejects JSON that is not an object', () => {
-    expect(() => parseBackup('[1,2,3]')).toThrow(/not a PIRT diary/);
-    expect(() => parseBackup('null')).toThrow(/not a PIRT diary/);
-    expect(() => parseBackup('"a string"')).toThrow(/not a PIRT diary/);
+    expect(() => parseBackup('[1,2,3]')).toThrow(/not a TripCircle diary/);
+    expect(() => parseBackup('null')).toThrow(/not a TripCircle diary/);
+    expect(() => parseBackup('"a string"')).toThrow(/not a TripCircle diary/);
   });
 
   it('rejects someone else’s export', () => {
     expect(() => parseBackup(file({ format: 'other.app' }))).toThrow(
-      /not a PIRT diary/
+      /not a TripCircle diary/
     );
   });
 
   it('rejects a file with no visits array', () => {
-    expect(() => parseBackup(file({ visits: 'lots' }))).toThrow(/not a PIRT diary/);
+    expect(() => parseBackup(file({ visits: 'lots' }))).toThrow(/not a TripCircle diary/);
   });
 
   it('refuses a backup from a newer build rather than half-reading it', () => {

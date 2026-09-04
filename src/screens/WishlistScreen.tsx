@@ -166,7 +166,7 @@ export function WishlistScreen({ navigation, route }: Props) {
   const shareInvite = () => {
     if (!list?.inviteCode) return;
     void Share.share({
-      message: `Join "${list.name}" on PIRT with this code: ${list.inviteCode}`,
+      message: `Join "${list.name}" on TripCircle with this code: ${list.inviteCode}`,
     });
   };
 
@@ -264,7 +264,7 @@ export function WishlistScreen({ navigation, route }: Props) {
         {list && list.city !== DATASET_CITY && (
           <Text style={styles.foreign}>
             This list was made in another city ({list.city}), so its places
-            are not in your copy of PIRT.
+            are not in your copy of TripCircle.
           </Text>
         )}
 

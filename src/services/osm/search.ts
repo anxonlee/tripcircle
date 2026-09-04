@@ -30,7 +30,7 @@ import { type OsmElement, osmToPlace, rankOsmResults } from '../../lib/osmPlace'
 const PHOTON_URL = 'https://photon.komoot.io/api/';
 
 /** Named so the instance operators can identify the traffic. */
-const USER_AGENT = 'PIRT/1.0 (day planner; contact via App Store listing)';
+const USER_AGENT = 'TripCircle/1.0 (day planner; contact via App Store listing)';
 
 /** Enough to choose from, few enough to read. */
 export const MAX_RESULTS = 12;

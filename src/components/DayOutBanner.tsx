@@ -39,7 +39,7 @@ export function DayOutBanner() {
    *
    * Without this the flag persists indefinitely: someone who set off on
    * Saturday and never tapped Done still sees "stop 2 of 4" on Tuesday, and
-   * tapping it lands on "your day window has passed". PIRT plans single
+   * tapping it lands on "your day window has passed". TripCircle plans single
    * days, so the calendar date is the whole test.
    */
   const staleDay =

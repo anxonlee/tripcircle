@@ -212,7 +212,7 @@ export interface WallCard {
  * telling them otherwise makes the app look like it lost their day rather
  * than merely lost a name.
  */
-export const FORGOTTEN_PLACE_LABEL = 'A place PIRT no longer has';
+export const FORGOTTEN_PLACE_LABEL = 'A place TripCircle no longer has';
 
 export function visitPlaceName(
   visit: Visit,

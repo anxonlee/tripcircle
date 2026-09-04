@@ -206,7 +206,7 @@ export class GoogleRoutingService implements RoutingService {
     // not exist under Jest, where a bare reference would throw.
     if (typeof __DEV__ !== 'undefined' && __DEV__) {
       console.log(
-        `[PIRT] distance matrix ${mode}: ${elementCount([rect])} elements`
+        `[TripCircle] distance matrix ${mode}: ${elementCount([rect])} elements`
       );
     }
 

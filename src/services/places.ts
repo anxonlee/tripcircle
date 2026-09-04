@@ -141,7 +141,7 @@ function resolvePlacesService(): PlacesService {
  * Results are remembered, which is not optional. A place that exists only in
  * a results list can be selected and then cease to exist on the next launch,
  * taking the stop out of the day and turning any stamp against it into a
- * place PIRT no longer has.
+ * place TripCircle no longer has.
  */
 function withOsmSearch(inner: PlacesService): PlacesService {
   const found = () => useFoundPlacesStore.getState().places;

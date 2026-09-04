@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "PIRT",
+    "name": "TripCircle",
     "slug": "tripcircle",
     "scheme": "pirtsf",
     "version": "1.0.0",
@@ -12,7 +12,7 @@
       "bundleIdentifier": "com.anxonlee.pirt.tripcircle",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSLocationWhenInUseUsageDescription": "PIRT reads your location when you stamp a visit or set your starting point, to suggest places near you. It is rounded to about 100 metres and never stored."
+        "NSLocationWhenInUseUsageDescription": "TripCircle reads your location when you stamp a visit or set your starting point, to suggest places near you. It is rounded to about 100 metres and never stored."
       }
     },
     "android": {
@@ -31,7 +31,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "PIRT adds the photo you pick to that visit in your diary. It never browses or uploads your library.",
+          "photosPermission": "TripCircle adds the photo you pick to that visit in your diary. It never browses or uploads your library.",
           "cameraPermission": false,
           "microphonePermission": false
         }
@@ -39,10 +39,10 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "PIRT reads your location when you stamp a visit or set your starting point, to suggest places near you. It is rounded to about 100 metres and never stored.",
+          "locationWhenInUsePermission": "TripCircle reads your location when you stamp a visit or set your starting point, to suggest places near you. It is rounded to about 100 metres and never stored.",
           "locationAlwaysAndWhenInUsePermission": false,
           "locationAlwaysPermission": false,
-          "motionUsagePermission": "PIRT never asks for motion data. The location component it is built on can read motion activity, so iOS requires this notice even though the app does not request it.",
+          "motionUsagePermission": "TripCircle never asks for motion data. The location component it is built on can read motion activity, so iOS requires this notice even though the app does not request it.",
           "isIosBackgroundLocationEnabled": false,
           "isAndroidBackgroundLocationEnabled": false
         }

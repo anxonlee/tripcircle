@@ -304,7 +304,7 @@ export function CostSplitScreen({ navigation, route }: Props) {
               is never going to: §487 keeps money movement out entirely.
             */}
             <Text style={styles.note}>
-              PIRT keeps the arithmetic. Paying each other happens wherever
+              TripCircle keeps the arithmetic. Paying each other happens wherever
               you already do it — nothing here moves money.
             </Text>
           </Section>
@@ -328,7 +328,7 @@ export function CostSplitScreen({ navigation, route }: Props) {
 
         {people.length === 0 && (
           <Text style={styles.empty}>
-            Add whoever was with you, then what each of you paid for. PIRT
+            Add whoever was with you, then what each of you paid for. TripCircle
             works out who owes whom.
           </Text>
         )}

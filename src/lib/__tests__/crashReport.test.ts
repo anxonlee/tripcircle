@@ -58,7 +58,7 @@ describe('formatReport', () => {
   });
 
   it('names the build, because a report against an unknown build is noise', () => {
-    expect(formatReport([crash()], META)).toContain('PIRT 1.0.0 (10)');
+    expect(formatReport([crash()], META)).toContain('TripCircle 1.0.0 (10)');
   });
 
   it('carries the message and the top of the stack', () => {

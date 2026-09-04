@@ -243,13 +243,13 @@ function explain(reason: DecodeFailure): { title: string; body: string } {
   switch (reason.kind) {
     case 'tooNew':
       return {
-        title: 'Made by a newer PIRT',
+        title: 'Made by a newer TripCircle',
         body: 'This day was shared from a later version of the app. Updating should let you open it.',
       };
     case 'otherCity':
       return {
         title: 'A day somewhere else',
-        body: 'This plan is for a different city than the places this copy of PIRT carries, so none of its stops are ones it knows.',
+        body: 'This plan is for a different city than the places this copy of TripCircle carries, so none of its stops are ones it knows.',
       };
     case 'empty':
       return {
@@ -257,7 +257,7 @@ function explain(reason: DecodeFailure): { title: string; body: string } {
         body: 'None of the places in this day are in your list.',
       };
     default:
-      return { title: 'Cannot open that link', body: 'It is not a PIRT day.' };
+      return { title: 'Cannot open that link', body: 'It is not a TripCircle day.' };
   }
 }
 

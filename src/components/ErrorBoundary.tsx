@@ -45,7 +45,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     // Goes to the device log, which `npx expo run:ios` surfaces during a
     // local run and Console.app shows for a TestFlight build.
-    console.error('[PIRT] render error', error, info.componentStack);
+    console.error('[TripCircle] render error', error, info.componentStack);
     this.setState({ componentStack: info.componentStack ?? null });
     void recordCrash({
       at: new Date().toISOString(),
@@ -96,7 +96,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
             size={28}
             color={colors.textSecondary}
           />
-          <Text style={styles.title}>PIRT hit a problem</Text>
+          <Text style={styles.title}>TripCircle hit a problem</Text>
           <Text style={styles.body}>
             Your diary is safe — visits are saved on this device and nothing
             here has been lost. Send the report over, then try again.

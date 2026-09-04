@@ -192,7 +192,7 @@ export function TripScreen({ navigation, route }: Props) {
     await Share.share({
       message: [
         `${trip.name} — ${days.length} day${days.length === 1 ? '' : 's'}, ${placeCount} place${placeCount === 1 ? '' : 's'} in the Bay Area.`,
-        `Open in PIRT: ${link}`,
+        `Open in TripCircle: ${link}`,
       ].join('\n\n'),
     });
   };

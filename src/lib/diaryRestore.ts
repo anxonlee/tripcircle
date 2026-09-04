@@ -58,10 +58,10 @@ export function parseBackup(raw: string): ParsedBackup {
   try {
     parsed = JSON.parse(raw) as Record<string, unknown>;
   } catch {
-    throw new Error('That file is not a PIRT diary export.');
+    throw new Error('That file is not a TripCircle diary export.');
   }
   if (!parsed || typeof parsed !== 'object') {
-    throw new Error('That file is not a PIRT diary export.');
+    throw new Error('That file is not a TripCircle diary export.');
   }
 
   const format = parsed.format;
@@ -69,7 +69,7 @@ export function parseBackup(raw: string): ParsedBackup {
     format === BACKUP_FORMAT ||
     (typeof format === 'string' && LEGACY_BACKUP_FORMATS.includes(format));
   if (!recognised || !Array.isArray(parsed.visits)) {
-    throw new Error('That file is not a PIRT diary export.');
+    throw new Error('That file is not a TripCircle diary export.');
   }
 
   const version = typeof parsed.version === 'number' ? parsed.version : 0;

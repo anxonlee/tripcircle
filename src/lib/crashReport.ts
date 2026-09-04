@@ -101,7 +101,7 @@ export function formatReport(
   meta: { version: string; build: string }
 ): string {
   if (log.length === 0) return '';
-  const head = `PIRT ${meta.version} (${meta.build}) — ${log.length} ${
+  const head = `TripCircle ${meta.version} (${meta.build}) — ${log.length} ${
     log.length === 1 ? 'problem' : 'problems'
   }, newest first. Times are the phone's own clock.`;
 

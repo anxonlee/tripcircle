@@ -89,7 +89,7 @@ export function SetupScreen({ navigation }: Props) {
     setLocating(false);
     if (res.status === 'ok') setHere(res.coords);
     else if (res.status === 'denied')
-      setLocError('Location is off for PIRT. Pick a landmark instead.');
+      setLocError('Location is off for TripCircle. Pick a landmark instead.');
     else setLocError('Could not get a location. Pick a landmark instead.');
   };
 
@@ -117,7 +117,7 @@ export function SetupScreen({ navigation }: Props) {
         <Text style={styles.subtitle}>
           {resuming
             ? 'Your day is still here — the places, their order and any times you set. You started from where you were, and we did not save that, so it needs setting again.'
-            : 'Pick a public landmark near you — a station or a plaza. PIRT never asks for your exact address.'}
+            : 'Pick a public landmark near you — a station or a plaza. TripCircle never asks for your exact address.'}
         </Text>
         <View style={styles.inputWrap}>
           <MaterialCommunityIcons name="magnify" size={18} color={colors.textMuted} />

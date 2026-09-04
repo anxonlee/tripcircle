@@ -497,7 +497,7 @@ export function PlanScreen({ showBack = false }: { showBack?: boolean } = {}) {
       message: [
         `A day in the Bay Area: ${names}`,
         held.length > 0 ? held.join(' · ') : null,
-        `Open in PIRT: ${link}`,
+        `Open in TripCircle: ${link}`,
       ]
         .filter(Boolean)
         .join('\n\n'),

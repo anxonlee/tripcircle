@@ -193,7 +193,7 @@ export default function App() {
   if (!hydrated || savedNav === undefined) {
     return (
       <View style={styles.splash}>
-        <Text style={styles.splashBrand}>PIRT</Text>
+        <Text style={styles.splashBrand}>TripCircle</Text>
       </View>
     );
   }

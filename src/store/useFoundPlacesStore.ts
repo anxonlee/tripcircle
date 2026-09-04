@@ -9,7 +9,7 @@ import type { CuratedPlace } from '../domain/types';
  * Without this, searching is a trap. A place found through Overpass exists
  * only in the results list; select it, close the app, and the id in the
  * selection points at nothing — the stop silently leaves the day, and a
- * stamp against it reads as a place PIRT no longer has. That is the same
+ * stamp against it reads as a place TripCircle no longer has. That is the same
  * failure the diary work fixed, arriving by a different door.
  *
  * The Google provider keeps its results in memory only, and must: PRD §12.2
