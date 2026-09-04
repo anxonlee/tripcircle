@@ -113,29 +113,34 @@ not imported, not built, and not maintained. It is kept for reference only.
 
 ---
 
-## Where the specification lives
+## About this repository, and where the specification lives
 
-There is deliberately **no PRD on this branch.** The specification is
-`travel-planner-prd.md` on `CCMFHK-economic`, and
-[BAY-AREA-DELTA.md](BAY-AREA-DELTA.md) records only what this build does
-differently.
+This is a **code-only extract** of a private working repository. The product
+specification, the design guide, the shipping notes and the privacy documents
+are kept there and are not published here; a few source comments point at them
+by name, which is why those paths will not resolve.
 
-That is not laziness. This branch carried a full copy of the PRD for a month
+The specification is deliberately **not duplicated** into the build branch.
+One document holds the spec, and a short delta records only what this build
+does differently.
+
+That is not laziness. The branch carried a full copy of the PRD for a month
 and it drifted — pricing examples in the wrong currency, two optimisation
 objectives described where the code had four, a budget cap that had already
 been removed. Nobody noticed until the two were read side by side. A second
 full specification for one product will diverge again; a short delta naming
 its parent revision cannot drift as far, and the whole difference is visible
-at once.
+at once. The same reasoning is why the spec is not vendored into this
+extract: a third copy would be a third thing to drift.
 
 ## Two builds
 
 There are two builds of this app, from a shared history:
 
-| | Branch | Bundle identifier |
-|---|---|---|
-| **TripCircle** (this one, SF Bay Area) | `main` | `com.anxonlee.pirt.tripcircle` |
-| **PIRT** (Hong Kong) | `CCMFHK-economic` | `com.anxonlee.pirt` |
+| | Bundle identifier |
+|---|---|
+| **TripCircle** (this one, SF Bay Area) | `com.anxonlee.pirt.tripcircle` |
+| **PIRT** (Hong Kong, not published here) | `com.anxonlee.pirt` |
 
 For a period **both were named PIRT**, and only the bundle identifier and the
 branch told them apart. This build has since taken its original name back.
